@@ -14,7 +14,7 @@ struct ListenLaterApp: App {
         do {
             persistence = try PersistenceController.makeContainer(inMemory: isDemoMode)
         } catch {
-            fatalError("Unable to create the Listen Later store: \(error)")
+            fatalError("Unable to create the MushRadio store: \(error)")
         }
 
         container = persistence.container
@@ -44,4 +44,3 @@ struct ListenLaterApp: App {
         .modelContainer(container)
     }
 }
-

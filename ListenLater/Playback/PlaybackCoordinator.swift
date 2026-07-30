@@ -135,7 +135,7 @@ final class PlaybackCoordinator {
         case .youtube:
             guard isForeground else {
                 transportState = .waitingForForeground
-                notice = "Open Listen Later to play this YouTube video."
+                notice = "Open MushRadio to play this YouTube video."
                 return
             }
             if item.youtubeMadeForKids {
@@ -430,7 +430,7 @@ final class PlaybackCoordinator {
 
         guard isForeground else {
             transportState = .waitingForForeground
-            notice = "Open Listen Later to play this YouTube video."
+            notice = "Open MushRadio to play this YouTube video."
             return
         }
         guard !item.youtubeMadeForKids else {

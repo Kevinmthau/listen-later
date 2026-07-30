@@ -268,7 +268,7 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(harness.coordinator.transportState, .waitingForForeground)
         XCTAssertEqual(
             harness.coordinator.notice,
-            "Open Listen Later to play this YouTube video."
+            "Open MushRadio to play this YouTube video."
         )
         XCTAssertNil(
             harness.youtubePlayer.videoID,

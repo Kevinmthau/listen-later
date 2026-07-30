@@ -202,7 +202,7 @@ private struct ShareStatusView: View {
     private var message: String {
         switch model.state {
         case .adding: "Saving this link at the bottom of your listening queue."
-        case .added: "Metadata will finish resolving in Listen Later."
+        case .added: "Metadata will finish resolving in MushRadio."
         case let .failed(message): message
         }
     }

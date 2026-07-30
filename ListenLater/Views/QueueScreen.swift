@@ -28,7 +28,7 @@ struct QueueScreen: View {
                 queueList
             }
             .background(Color(uiColor: .systemGroupedBackground))
-            .navigationTitle("Listen Later")
+            .navigationTitle("MushRadio")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

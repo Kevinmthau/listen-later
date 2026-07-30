@@ -1,6 +1,6 @@
-# Listen Later
+# MushRadio
 
-Listen Later is a native iPhone app with one ordered queue for podcast episodes
+MushRadio is a native iPhone app with one ordered queue for podcast episodes
 and YouTube videos. It is intentionally not a discovery app: add a public URL
 from the iOS Share Sheet or paste one into the app, then press Play.
 
@@ -62,7 +62,7 @@ also requires a visible official player, an OS-provided WebView on Apple
 platforms, a viewport of at least 200 by 200 points/pixels, unobscured controls,
 client identity, and visibility before scripted autoplay.
 
-Listen Later therefore behaves as follows:
+MushRadio therefore behaves as follows:
 
 - A YouTube queue item stores a video ID, never an audio or downloadable media
   URL.
@@ -81,9 +81,9 @@ Listen Later therefore behaves as follows:
   unavailable and skipped.
 - As a conservative product safeguard, a video whose official
   `status.madeForKids` value is true is handed off to the official YouTube app
-  or website instead of being embedded. This is a Listen Later product choice,
+  or website instead of being embedded. This is a MushRadio product choice,
   not a claim that every made-for-kids embed is categorically prohibited.
-- Listen Later does not scrape YouTube pages, suppress advertisements, alter the
+- MushRadio does not scrape YouTube pages, suppress advertisements, alter the
   player, cache video, download media, or isolate an audio track.
 - It displays each video’s current API metadata without aggregating YouTube
   durations into a cross-source queue total or deriving a completion metric
@@ -278,11 +278,11 @@ web URL. It also attempts a plain-text URL when a host supplies text rather than
 
 After installing the containing app:
 
-1. Open Listen Later once.
+1. Open MushRadio once.
 2. In Safari, Podcasts, YouTube, or another host app, open the Share Sheet.
 3. If needed, choose **More**, enable **Add to Queue**, and pin it to favorites.
 4. Share a public HTTPS URL and select **Add to Queue**.
-5. Wait for the “Added to Queue” confirmation, then activate Listen Later.
+5. Wait for the “Added to Queue” confirmation, then activate MushRadio.
 6. Confirm the item appears at the bottom and changes from resolving to ready or
    unavailable.
 
@@ -402,7 +402,7 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
 - [ ] Share one podcast episode URL from Safari or a podcast site.
 - [ ] Share Apple Podcasts and direct enclosure URLs.
 - [ ] Share YouTube watch, short, live, mobile, and `youtu.be` URLs.
-- [ ] Confirm rapid extension completion and import when Listen Later activates.
+- [ ] Confirm rapid extension completion and import when MushRadio activates.
 - [ ] Confirm unsupported, malformed, authenticated, deleted, and
   non-embeddable items become unavailable and the queue continues.
 - [ ] Turn off networking during resolution, then retry from the item menu.
@@ -459,7 +459,7 @@ login or authorized YouTube account data.
 YouTube’s
 [Developer Policies](https://developers.google.com/youtube/terms/developer-policies)
 require limited non-authorized API data to be deleted or refreshed within 30
-calendar days. Listen Later schedules a refresh when cached YouTube metadata is
+calendar days. MushRadio schedules a refresh when cached YouTube metadata is
 29 days old. Cleanup runs on launch, activation, and periodically while the app
 process is active. If refresh still cannot succeed once the cached data reaches
 30 days, the app clears the stored YouTube title, channel, thumbnail, duration,
@@ -513,7 +513,7 @@ privacy policy or legal terms.
   fail.
 - Direct audio URLs may not provide show, artwork, or duration metadata until
   playback.
-- Plain HTTP podcast pages, feeds, and enclosures are rejected. Listen Later
+- Plain HTTP podcast pages, feeds, and enclosures are rejected. MushRadio
   intentionally requires public HTTPS URLs and does not weaken App Transport
   Security with a blanket exception.
 - A running app receives Share Extension additions through a cross-process
