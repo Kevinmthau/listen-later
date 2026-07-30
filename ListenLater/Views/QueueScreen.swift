@@ -131,15 +131,17 @@ struct QueueScreen: View {
                                 : Color(uiColor: .secondarySystemGroupedBackground)
                         )
                         .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                            Button {
-                                model.queue.moveToPlayNext(
-                                    item,
-                                    after: model.playback.currentItemID
-                                )
-                            } label: {
-                                Label("Play Next", systemImage: "text.insert")
+                            if model.playback.currentItemID != item.id {
+                                Button {
+                                    model.queue.moveToPlayNext(
+                                        item,
+                                        after: model.playback.currentItemID
+                                    )
+                                } label: {
+                                    Label("Play Next", systemImage: "text.insert")
+                                }
+                                .tint(.indigo)
                             }
-                            .tint(.indigo)
                         }
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
@@ -162,13 +164,15 @@ struct QueueScreen: View {
                             .tint(item.isPlayed ? .orange : .green)
                         }
                         .contextMenu {
-                            Button {
-                                model.queue.moveToPlayNext(
-                                    item,
-                                    after: model.playback.currentItemID
-                                )
-                            } label: {
-                                Label("Play Next", systemImage: "text.insert")
+                            if model.playback.currentItemID != item.id {
+                                Button {
+                                    model.queue.moveToPlayNext(
+                                        item,
+                                        after: model.playback.currentItemID
+                                    )
+                                } label: {
+                                    Label("Play Next", systemImage: "text.insert")
+                                }
                             }
 
                             Button {

@@ -69,11 +69,13 @@ final class ShareViewController: UIViewController {
 
         for provider in providers {
             if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
-                let item = try await provider.item(forTypeIdentifier: UTType.url.identifier)
-                if let url = item as? URL {
+                let item = try await provider.sharedItem(
+                    forTypeIdentifier: UTType.url.identifier
+                )
+                if case let .url(url) = item {
                     return url
                 }
-                if let value = item as? String, let url = URL(string: value) {
+                if case let .text(value) = item, let url = URL(string: value) {
                     return url
                 }
             }
@@ -81,10 +83,10 @@ final class ShareViewController: UIViewController {
 
         for provider in providers {
             if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
-                let item = try await provider.item(
+                let item = try await provider.sharedItem(
                     forTypeIdentifier: UTType.plainText.identifier
                 )
-                if let value = item as? String, let url = firstURL(in: value) {
+                if case let .text(value) = item, let url = firstURL(in: value) {
                     return url
                 }
             }
@@ -119,14 +121,26 @@ final class ShareViewController: UIViewController {
     }
 }
 
+private enum SharedProviderItem: Sendable {
+    case url(URL)
+    case text(String)
+}
+
 private extension NSItemProvider {
-    func item(forTypeIdentifier identifier: String) async throws -> NSSecureCoding? {
+    @MainActor
+    func sharedItem(
+        forTypeIdentifier identifier: String
+    ) async throws -> SharedProviderItem? {
         try await withCheckedThrowingContinuation { continuation in
             loadItem(forTypeIdentifier: identifier, options: nil) { item, error in
                 if let error {
                     continuation.resume(throwing: error)
+                } else if let url = item as? URL {
+                    continuation.resume(returning: .url(url))
+                } else if let value = item as? String {
+                    continuation.resume(returning: .text(value))
                 } else {
-                    continuation.resume(returning: item)
+                    continuation.resume(returning: nil)
                 }
             }
         }

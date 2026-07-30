@@ -286,6 +286,46 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         )
     }
 
+    func testReplayingPlayedYouTubeClearsPlayedStateAndProgress() throws {
+        let harness = try makeHarness()
+        let item = appendYouTube(to: harness.queue, ordinal: 1)
+        harness.queue.saveProgress(
+            for: item,
+            position: 120,
+            duration: 240,
+            force: true
+        )
+        harness.queue.markPlayed(item)
+
+        harness.coordinator.start(item, autoplay: false)
+
+        XCTAssertFalse(item.isPlayed)
+        XCTAssertEqual(item.playbackPosition, 0)
+        XCTAssertEqual(harness.coordinator.position, 0)
+        XCTAssertEqual(harness.coordinator.currentItemID, item.id)
+    }
+
+    func testPodcastWatchdogStallRemainsRetryable() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let second = appendPodcast(to: harness.queue, ordinal: 2, duration: 600)
+        harness.coordinator.start(first)
+
+        harness.engine.emit(.stalled("Playback timed out."))
+
+        XCTAssertEqual(first.status, .ready)
+        XCTAssertEqual(harness.coordinator.currentItemID, first.id)
+        XCTAssertEqual(harness.coordinator.transportState, .needsUserAction)
+        XCTAssertEqual(harness.engine.loads.count, 1)
+        XCTAssertNotEqual(harness.coordinator.currentItemID, second.id)
+
+        harness.coordinator.play()
+
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+        XCTAssertEqual(harness.engine.loads.count, 2)
+        XCTAssertEqual(harness.engine.loads.last?.url, first.playbackURL)
+    }
+
     func testYouTubePlayerRejectsStaleLoadAndVideoEvents() {
         let player = YouTubePlayerModel()
         let firstLoadID = UUID()
@@ -339,7 +379,7 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         let loadID = UUID()
         engine.eventHandler = { eventLoadID, event in
             guard eventLoadID == loadID,
-                  case let .failed(message) = event,
+                  case let .stalled(message) = event,
                   message.contains("did not start or recover")
             else {
                 return
@@ -500,7 +540,7 @@ private final class FakePodcastPlaybackEngine: PodcastPlaybackEngine {
 
     func emit(_ event: PodcastPlaybackEvent, loadID: UUID? = nil) {
         switch event {
-        case .ended, .failed:
+        case .ended, .stalled, .failed:
             isPlaying = false
         case .timeChanged:
             break

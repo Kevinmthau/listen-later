@@ -5,9 +5,16 @@ import Foundation
 /// URLSession makes URLProtocol-based tests possible without provider changes.
 struct ProviderHTTPClient: @unchecked Sendable {
     let session: URLSession
+    private let validateEndpoint: @Sendable (URL) async throws -> Void
 
-    init(session: URLSession) {
+    init(
+        session: URLSession,
+        validateEndpoint: @escaping @Sendable (URL) async throws -> Void = {
+            try await ProviderEndpointValidator.validate($0)
+        }
+    ) {
         self.session = session
+        self.validateEndpoint = validateEndpoint
     }
 
     func data(
@@ -21,27 +28,11 @@ struct ProviderHTTPClient: @unchecked Sendable {
                 request.url ?? URL(fileURLWithPath: "/")
             )
         }
-        try await ProviderEndpointValidator.validate(requestURL)
-
         do {
-            let delegate = ProviderRedirectDelegate()
-            let (bytes, response) = try await session.bytes(
-                for: request,
-                delegate: delegate
+            let (bytes, httpResponse) = try await responseFollowingRedirects(
+                for: request
             )
-
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw ProviderResolutionError.invalidHTTPResponse(
-                    redacted(requestURL)
-                )
-            }
-            guard let responseURL = httpResponse.url,
-                  ProviderURLSupport.isHTTPURL(responseURL)
-            else {
-                throw ProviderResolutionError.invalidURL(
-                    redacted(httpResponse.url ?? requestURL)
-                )
-            }
+            let responseURL = httpResponse.url ?? requestURL
 
             guard (200..<300).contains(httpResponse.statusCode) else {
                 throw ProviderResolutionError.httpStatus(
@@ -82,7 +73,6 @@ struct ProviderHTTPClient: @unchecked Sendable {
         guard ProviderURLSupport.isHTTPURL(url) else {
             throw ProviderResolutionError.invalidURL(redacted(url))
         }
-        try await ProviderEndpointValidator.validate(url)
         var request = URLRequest(
             url: url,
             cachePolicy: .reloadRevalidatingCacheData,
@@ -95,20 +85,11 @@ struct ProviderHTTPClient: @unchecked Sendable {
         )
 
         do {
-            let (_, response) = try await session.data(
-                for: request,
-                delegate: ProviderRedirectDelegate()
+            let (bytes, httpResponse) = try await responseFollowingRedirects(
+                for: request
             )
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw ProviderResolutionError.invalidHTTPResponse(redacted(url))
-            }
-            guard let responseURL = httpResponse.url,
-                  ProviderURLSupport.isHTTPURL(responseURL)
-            else {
-                throw ProviderResolutionError.invalidURL(
-                    redacted(httpResponse.url ?? url)
-                )
-            }
+            bytes.task.cancel()
+            let responseURL = httpResponse.url ?? url
             guard (200..<300).contains(httpResponse.statusCode) else {
                 throw ProviderResolutionError.httpStatus(
                     httpResponse.statusCode,
@@ -121,6 +102,129 @@ struct ProviderHTTPClient: @unchecked Sendable {
         } catch {
             throw ProviderResolutionError.network(error.localizedDescription)
         }
+    }
+
+    /// Resolves and validates the redirect chain immediately before a remote
+    /// endpoint is persisted for AVPlayer or AsyncImage consumption.
+    func resolvedEndpointURL(
+        for url: URL,
+        timeout: TimeInterval = 12
+    ) async throws -> URL {
+        do {
+            return try await headResponse(for: url, timeout: timeout).url ?? url
+        } catch ProviderResolutionError.httpStatus {
+            var request = URLRequest(
+                url: url,
+                cachePolicy: .reloadRevalidatingCacheData,
+                timeoutInterval: timeout
+            )
+            request.httpMethod = "GET"
+            request.setValue("bytes=0-0", forHTTPHeaderField: "Range")
+            request.setValue("*/*", forHTTPHeaderField: "Accept")
+
+            do {
+                let (bytes, response) = try await responseFollowingRedirects(
+                    for: request
+                )
+                bytes.task.cancel()
+                let responseURL = response.url ?? url
+                guard (200..<300).contains(response.statusCode) else {
+                    throw ProviderResolutionError.httpStatus(
+                        response.statusCode,
+                        redacted(responseURL)
+                    )
+                }
+                return responseURL
+            } catch let error as ProviderResolutionError {
+                throw error
+            } catch {
+                throw ProviderResolutionError.network(error.localizedDescription)
+            }
+        }
+    }
+
+    private func responseFollowingRedirects(
+        for request: URLRequest,
+        maximumRedirects: Int = 10
+    ) async throws -> (URLSession.AsyncBytes, HTTPURLResponse) {
+        var currentRequest = request
+
+        for redirectCount in 0...maximumRedirects {
+            guard let requestURL = currentRequest.url,
+                  ProviderURLSupport.isHTTPURL(requestURL)
+            else {
+                throw ProviderResolutionError.invalidURL(
+                    redacted(currentRequest.url ?? URL(fileURLWithPath: "/"))
+                )
+            }
+            try await validateEndpoint(requestURL)
+
+            let (bytes, response) = try await session.bytes(
+                for: currentRequest,
+                delegate: ProviderNoRedirectDelegate()
+            )
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw ProviderResolutionError.invalidHTTPResponse(
+                    redacted(requestURL)
+                )
+            }
+
+            guard [301, 302, 303, 307, 308].contains(httpResponse.statusCode),
+                  let location = httpResponse.value(
+                      forHTTPHeaderField: "Location"
+                  )
+            else {
+                guard let responseURL = httpResponse.url,
+                      ProviderURLSupport.isHTTPURL(responseURL)
+                else {
+                    throw ProviderResolutionError.invalidURL(
+                        redacted(httpResponse.url ?? requestURL)
+                    )
+                }
+                return (bytes, httpResponse)
+            }
+            bytes.task.cancel()
+
+            guard redirectCount < maximumRedirects else {
+                throw ProviderResolutionError.malformedResponse(
+                    "The server returned too many redirects."
+                )
+            }
+            guard let redirectURL = URL(
+                string: location,
+                relativeTo: requestURL
+            )?.absoluteURL,
+            ProviderURLSupport.isHTTPURL(redirectURL)
+            else {
+                throw ProviderResolutionError.invalidURL(
+                    redacted(
+                        URL(string: location, relativeTo: requestURL)?.absoluteURL
+                            ?? requestURL
+                    )
+                )
+            }
+
+            var redirectedRequest = currentRequest
+            redirectedRequest.url = redirectURL
+            if httpResponse.statusCode == 303,
+               currentRequest.httpMethod?.uppercased() != "HEAD"
+            {
+                redirectedRequest.httpMethod = "GET"
+                redirectedRequest.httpBody = nil
+                redirectedRequest.setValue(nil, forHTTPHeaderField: "Content-Length")
+            }
+            if requestURL.host?.caseInsensitiveCompare(redirectURL.host ?? "")
+                != .orderedSame
+            {
+                redirectedRequest.setValue(nil, forHTTPHeaderField: "Authorization")
+                redirectedRequest.setValue(nil, forHTTPHeaderField: "Cookie")
+            }
+            currentRequest = redirectedRequest
+        }
+
+        throw ProviderResolutionError.malformedResponse(
+            "The server returned too many redirects."
+        )
     }
 
     private func redacted(_ url: URL) -> URL {
@@ -141,7 +245,7 @@ struct ProviderHTTPClient: @unchecked Sendable {
     }
 }
 
-private final class ProviderRedirectDelegate:
+private final class ProviderNoRedirectDelegate:
     NSObject,
     URLSessionTaskDelegate,
     @unchecked Sendable
@@ -153,14 +257,7 @@ private final class ProviderRedirectDelegate:
         newRequest request: URLRequest,
         completionHandler: @escaping @Sendable (URLRequest?) -> Void
     ) {
-        guard let url = request.url,
-              ProviderURLSupport.isHTTPURL(url),
-              ProviderEndpointValidator.isPubliclyResolvable(url)
-        else {
-            completionHandler(nil)
-            return
-        }
-        completionHandler(request)
+        completionHandler(nil)
     }
 }
 
@@ -169,13 +266,65 @@ enum ProviderEndpointValidator {
         case publicEndpoint
         case privateEndpoint
         case unresolved
+        case timedOut
+        case cancelled
     }
 
-    static func validate(_ url: URL) async throws {
-        let task = Task<Resolution, Never>.detached(priority: .userInitiated) {
-            ProviderEndpointValidator.resolution(for: url)
+    private final class ResolutionRace: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Resolution, Never>?
+        private var result: Resolution?
+
+        func install(_ continuation: CheckedContinuation<Resolution, Never>) {
+            lock.lock()
+            if let result {
+                lock.unlock()
+                continuation.resume(returning: result)
+            } else {
+                self.continuation = continuation
+                lock.unlock()
+            }
         }
-        let endpointResolution = await task.value
+
+        func finish(with result: Resolution) {
+            lock.lock()
+            guard self.result == nil else {
+                lock.unlock()
+                return
+            }
+            self.result = result
+            let continuation = continuation
+            self.continuation = nil
+            lock.unlock()
+            continuation?.resume(returning: result)
+        }
+    }
+
+    static func validate(
+        _ url: URL,
+        timeout: Duration = .seconds(5)
+    ) async throws {
+        guard ProviderURLSupport.isHTTPURL(url) else {
+            throw ProviderResolutionError.invalidURL(url)
+        }
+
+        let race = ResolutionRace()
+        let endpointResolution = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                race.install(continuation)
+                Task.detached(priority: .userInitiated) {
+                    race.finish(
+                        with: ProviderEndpointValidator.resolution(for: url)
+                    )
+                }
+                Task.detached {
+                    try? await Task.sleep(for: timeout)
+                    race.finish(with: .timedOut)
+                }
+            }
+        } onCancel: {
+            race.finish(with: .cancelled)
+        }
 
         switch endpointResolution {
         case .publicEndpoint:
@@ -186,11 +335,13 @@ enum ProviderEndpointValidator {
             throw ProviderResolutionError.network(
                 "The host \(url.host ?? "") could not be resolved."
             )
+        case .timedOut:
+            throw ProviderResolutionError.network(
+                "Resolving \(url.host ?? "this host") timed out."
+            )
+        case .cancelled:
+            throw CancellationError()
         }
-    }
-
-    static func isPubliclyResolvable(_ url: URL) -> Bool {
-        resolution(for: url) == .publicEndpoint
     }
 
     private static func resolution(for url: URL) -> Resolution {

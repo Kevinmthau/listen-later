@@ -2,11 +2,11 @@ import Foundation
 
 struct ProviderRegistry: Sendable {
     private let providers: [any MediaProvider]
-    private let validatesResolvedEndpoints: Bool
+    private let endpointClient: ProviderHTTPClient?
 
     init(providers: [any MediaProvider]) {
         self.providers = providers
-        self.validatesResolvedEndpoints = false
+        self.endpointClient = nil
     }
 
     init(
@@ -21,7 +21,7 @@ struct ProviderRegistry: Sendable {
             ),
             PodcastProviderAdapter(session: podcastSession)
         ]
-        self.validatesResolvedEndpoints = true
+        self.endpointClient = ProviderHTTPClient(session: podcastSession)
     }
 
     func provider(for url: URL) -> (any MediaProvider)? {
@@ -36,14 +36,38 @@ struct ProviderRegistry: Sendable {
             throw ProviderResolutionError.unsupportedURL(url)
         }
         let resolved = try await provider.resolve(url)
-        guard validatesResolvedEndpoints else { return resolved }
+        guard let endpointClient else { return resolved }
 
-        if let artworkURL = resolved.artworkURL {
-            try await ProviderEndpointValidator.validate(artworkURL)
+        let artworkURL: URL?
+        if let candidate = resolved.artworkURL {
+            artworkURL = try? await endpointClient.resolvedEndpointURL(
+                for: candidate
+            )
+        } else {
+            artworkURL = nil
         }
-        if case let .remoteAudio(audioURL) = resolved.playback {
-            try await ProviderEndpointValidator.validate(audioURL)
+
+        let playback: ProviderPlaybackReference
+        switch resolved.playback {
+        case let .remoteAudio(candidate):
+            playback = .remoteAudio(
+                try await endpointClient.resolvedEndpointURL(for: candidate)
+            )
+        case .youtubeVideoID:
+            playback = resolved.playback
         }
-        return resolved
+
+        return ProviderResolvedItem(
+            originalURL: resolved.originalURL,
+            canonicalURL: resolved.canonicalURL,
+            title: resolved.title,
+            creatorName: resolved.creatorName,
+            artworkURL: artworkURL,
+            duration: resolved.duration,
+            publishedAt: resolved.publishedAt,
+            source: resolved.source,
+            playback: playback,
+            isMadeForKids: resolved.isMadeForKids
+        )
     }
 }

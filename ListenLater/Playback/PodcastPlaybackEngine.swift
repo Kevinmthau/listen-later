@@ -4,6 +4,7 @@ import Foundation
 enum PodcastPlaybackEvent: Equatable {
     case timeChanged(position: TimeInterval, duration: TimeInterval)
     case ended
+    case stalled(String)
     case failed(String)
 }
 
@@ -266,7 +267,7 @@ final class AVPlayerPodcastEngine: PodcastPlaybackEngine {
             }
             guard !Task.isCancelled, let self else { return }
             self.playbackWatchdogTask = nil
-            self.failActiveLoad(
+            self.stallActiveLoad(
                 loadID,
                 message: "Podcast playback did not start or recover within 30 seconds."
             )
@@ -295,6 +296,16 @@ final class AVPlayerPodcastEngine: PodcastPlaybackEngine {
         loadIdentity.current = nil
         player.pause()
         eventHandler?(loadID, .failed(message))
+    }
+
+    private func stallActiveLoad(_ loadID: UUID, message: String) {
+        guard activeLoadID == loadID else { return }
+        wantsPlayback = false
+        cancelPlaybackWatchdog()
+        activeLoadID = nil
+        loadIdentity.current = nil
+        player.pause()
+        eventHandler?(loadID, .stalled(message))
     }
 }
 
