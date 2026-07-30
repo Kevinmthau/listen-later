@@ -45,6 +45,10 @@ final class PlaybackCoordinator {
         queue.item(id: currentItemID)
     }
 
+    var nativeVideoPlayer: AVPlayer? {
+        podcastEngine.renderingPlayer
+    }
+
     init(
         queue: QueueStore,
         podcastEngine: PodcastPlaybackEngine? = nil,
@@ -127,7 +131,7 @@ final class PlaybackCoordinator {
         }
 
         switch item.source {
-        case .podcast:
+        case .podcast, .socialVideo:
             activateAudioSession()
             podcastEngine.play()
             transportState = .playing
@@ -149,12 +153,14 @@ final class PlaybackCoordinator {
 
     func start(_ item: QueueItem, autoplay: Bool = true) {
         saveCurrentProgress(force: true)
+        let currentUsesNativePlayback =
+            currentItem.map { $0.source != .youtube } ?? false
         let canKeepPodcastSession =
-            currentItem?.source == .podcast
-            && item.source == .podcast
+            currentUsesNativePlayback
+            && item.source != .youtube
             && item.status == .ready
         let shouldDeactivatePodcastSession =
-            currentItem?.source == .podcast
+            currentUsesNativePlayback
             && !canKeepPodcastSession
         parkCurrentTransport(
             deactivateAudioSession: shouldDeactivatePodcastSession
@@ -191,9 +197,21 @@ final class PlaybackCoordinator {
             return
         }
 
+        if item.playbackURLNeedsRefresh() {
+            if autoplay {
+                pendingResolutionAutoplayItemID = item.id
+            }
+            transportState = .loading
+            notice = "Refreshing the video link…"
+            Task { [weak self] in
+                await self?.queue.refreshPlaybackURL(for: item)
+            }
+            return
+        }
+
         switch item.source {
-        case .podcast:
-            startPodcast(item, autoplay: autoplay)
+        case .podcast, .socialVideo:
+            startNativePlayback(item, autoplay: autoplay)
         case .youtube:
             startYouTube(item, autoplay: autoplay)
         }
@@ -211,7 +229,7 @@ final class PlaybackCoordinator {
             return
         }
         switch item.source {
-        case .podcast:
+        case .podcast, .socialVideo:
             podcastEngine.pause()
         case .youtube:
             youtubePlayer.pause()
@@ -235,7 +253,7 @@ final class PlaybackCoordinator {
         let clamped = min(max(0, target), upperBound)
         position = clamped
         switch item.source {
-        case .podcast:
+        case .podcast, .socialVideo:
             podcastEngine.seek(to: clamped)
         case .youtube:
             youtubePlayer.seek(to: clamped)
@@ -256,7 +274,7 @@ final class PlaybackCoordinator {
         guard let item = currentItem else { return }
         item.playbackRate = playbackRate
         switch item.source {
-        case .podcast:
+        case .podcast, .socialVideo:
             podcastEngine.setRate(Float(playbackRate))
         case .youtube:
             youtubePlayer.setPlaybackRate(playbackRate)
@@ -382,7 +400,7 @@ final class PlaybackCoordinator {
 
         if preparedItemID == item.id {
             switch item.source {
-            case .podcast:
+            case .podcast, .socialVideo:
                 podcastEngine.seek(to: position)
                 podcastEngine.setRate(Float(playbackRate))
                 updateNowPlaying()
@@ -396,9 +414,10 @@ final class PlaybackCoordinator {
         }
     }
 
-    private func startPodcast(_ item: QueueItem, autoplay: Bool) {
+    private func startNativePlayback(_ item: QueueItem, autoplay: Bool) {
         guard let url = item.playbackURL else {
-            queue.markUnavailable(item, reason: "The podcast audio URL is missing.")
+            let mediaName = item.source == .socialVideo ? "video" : "podcast audio"
+            queue.markUnavailable(item, reason: "The \(mediaName) URL is missing.")
             advanceAfterFailure()
             return
         }
@@ -466,7 +485,7 @@ final class PlaybackCoordinator {
     ) {
         guard activePodcastLoadID == loadID,
               let item = currentItem,
-              item.source == .podcast
+              item.source != .youtube
         else {
             return
         }
@@ -500,7 +519,9 @@ final class PlaybackCoordinator {
         case let .failed(message):
             activePodcastLoadID = nil
             queue.markUnavailable(item, reason: message)
-            notice = "Skipped an unavailable podcast episode."
+            notice = item.source == .socialVideo
+                ? "Skipped an unavailable social video."
+                : "Skipped an unavailable podcast episode."
             advanceAfterFailure()
         }
     }
@@ -692,7 +713,7 @@ final class PlaybackCoordinator {
                 else { return }
                 switch type {
                 case .began:
-                    guard let self, self.currentItem?.source == .podcast else {
+                    guard let self, self.currentItem?.source != .youtube else {
                         return
                     }
                     self.wasPlayingBeforeInterruption = self.transportState.isPlaying
@@ -795,7 +816,7 @@ final class PlaybackCoordinator {
     }
 
     private func updateNowPlaying() {
-        guard let item = currentItem, item.source == .podcast else {
+        guard let item = currentItem, item.source != .youtube else {
             clearNowPlaying()
             return
         }
@@ -806,7 +827,10 @@ final class PlaybackCoordinator {
             MPNowPlayingInfoPropertyElapsedPlaybackTime: position,
             MPNowPlayingInfoPropertyPlaybackRate: transportState.isPlaying ? playbackRate : 0,
             MPNowPlayingInfoPropertyDefaultPlaybackRate: playbackRate,
-            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue
+            MPNowPlayingInfoPropertyMediaType:
+                item.source == .socialVideo
+                ? MPNowPlayingInfoMediaType.video.rawValue
+                : MPNowPlayingInfoMediaType.audio.rawValue
         ]
         if let index = queue.items.firstIndex(where: { $0.id == item.id }) {
             info[MPNowPlayingInfoPropertyPlaybackQueueIndex] = index

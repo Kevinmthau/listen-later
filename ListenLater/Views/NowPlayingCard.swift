@@ -50,10 +50,13 @@ struct NowPlayingCard: View {
 
     @ViewBuilder
     private func currentContent(_ item: QueueItem) -> some View {
-        if item.source == .youtube {
-            youtubeSurface(item)
-        } else {
+        switch item.source {
+        case .podcast:
             podcastIdentity(item)
+        case .socialVideo:
+            socialVideoSurface
+        case .youtube:
+            youtubeSurface(item)
         }
 
         VStack(spacing: 3) {
@@ -90,6 +93,15 @@ struct NowPlayingCard: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
+    }
+
+    private var socialVideoSurface: some View {
+        NativeVideoPlayerView(player: playback.nativeVideoPlayer)
+            .frame(minWidth: 200)
+            .frame(height: 225)
+            .background(.black)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .accessibilityHint("Use the playback controls below to watch")
     }
 
     private func youtubeSurface(_ item: QueueItem) -> some View {

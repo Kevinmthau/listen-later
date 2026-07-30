@@ -57,6 +57,30 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(harness.engine.playCallCount, 2)
     }
 
+    func testSocialVideoUsesNativePlayerAndPersistsVideoProgress() throws {
+        let harness = try makeHarness()
+        let item = appendSocialVideo(to: harness.queue, ordinal: 1)
+
+        harness.coordinator.start(item)
+
+        XCTAssertEqual(harness.coordinator.currentItemID, item.id)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+        XCTAssertEqual(
+            harness.engine.loads.last?.url,
+            URL(string: "https://cdn.example.com/social/1.mp4")
+        )
+
+        item.progressUpdatedAt = .distantPast
+        harness.engine.emit(.timeChanged(position: 45, duration: 120))
+        XCTAssertEqual(item.playbackPosition, 45)
+        XCTAssertEqual(item.duration, 120)
+        XCTAssertFalse(item.isPlayed)
+
+        harness.engine.emit(.ended)
+        XCTAssertTrue(item.isPlayed)
+        XCTAssertEqual(item.playbackPosition, 120)
+    }
+
     func testCompletedPodcastIsNotRevertedByAutomaticAdvanceProgressSave() throws {
         let harness = try makeHarness()
         let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
@@ -485,6 +509,31 @@ private extension PlaybackCoordinatorPodcastEngineTests {
                 publishedAt: nil,
                 source: .youtube,
                 playback: .youtubeVideoID("video\(String(format: "%05d", ordinal))"),
+                isMadeForKids: false
+            )
+        )
+    }
+
+    @discardableResult
+    func appendSocialVideo(to queue: QueueStore, ordinal: Int) -> QueueItem {
+        queue.appendResolvedForTesting(
+            ProviderResolvedItem(
+                originalURL: URL(
+                    string: "https://x.com/example/status/\(ordinal)"
+                )!,
+                canonicalURL: URL(
+                    string: "https://x.com/example/status/\(ordinal)"
+                )!,
+                title: "X video",
+                creatorName: "@example",
+                artworkURL: nil,
+                duration: nil,
+                publishedAt: nil,
+                source: .socialVideo,
+                playback: .remoteVideo(
+                    URL(string: "https://cdn.example.com/social/\(ordinal).mp4")!,
+                    expiresAt: Date().addingTimeInterval(240)
+                ),
                 isMadeForKids: false
             )
         )

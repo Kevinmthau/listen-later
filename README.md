@@ -1,12 +1,14 @@
 # MushRadio
 
-MushRadio is a native iPhone app with one ordered queue for podcast episodes
-and YouTube videos. It is intentionally not a discovery app: add a public URL
-from the iOS Share Sheet or paste one into the app, then press Play.
+MushRadio is a native iPhone app with one ordered queue for podcast episodes,
+X/Instagram videos, and YouTube videos. It is intentionally not a discovery
+app: add a public URL from the iOS Share Sheet or paste one into the app, then
+press Play.
 
 The minimum deployment target is iOS 17 because the app uses SwiftData. The app
-is built with SwiftUI, SwiftData and CloudKit; podcasts use AVFoundation and
-MediaPlayer; YouTube uses the official YouTube Data API and IFrame Player API.
+is built with SwiftUI, SwiftData and CloudKit; podcasts and resolved social
+videos use AVFoundation and MediaPlayer; YouTube uses the official YouTube Data
+API and IFrame Player API.
 
 > [!IMPORTANT]
 > YouTube does not permit third-party API clients to extract audio, download
@@ -24,8 +26,11 @@ flowchart TD
     Inbox -->|"import when app becomes active"| Queue["QueueStore<br>one ordered SwiftData queue"]
     Queue --> Registry["ProviderRegistry"]
     Registry --> Podcast["Podcast adapter<br>direct audio · Apple Lookup · HTML/RSS"]
+    Registry --> Social["X/Instagram adapter<br>video-grabber /resolve"]
     Registry --> YouTube["YouTube adapter<br>official videos.list metadata"]
-    Podcast --> Audio["AVPlayer podcast engine<br>background + remote controls"]
+    Podcast --> Native["Native AVPlayer engine<br>progress + remote controls"]
+    Social --> Grabber["video-grabber<br>yt-dlp resolution"]
+    Grabber --> Native
     YouTube --> IFrame["Visible WKWebView<br>YouTube IFrame Player API"]
     Queue <--> Store["SwiftData store<br>App Group + private CloudKit"]
 ```
@@ -41,6 +46,10 @@ Key implementation boundaries:
 - Podcast resolution supports direct audio URLs, Apple Podcasts episode links
   through Apple’s Lookup API, standard HTML RSS/Atom discovery, and RSS enclosure
   matching.
+- X status links and supported Instagram post/reel links are sent to the
+  self-hosted `video-grabber` `/resolve` API. The original post URL is durable;
+  the returned signed MP4 URL is treated as short-lived and refreshed before
+  later playback.
 - YouTube URL parsing yields a video ID. Public title, channel, artwork,
   duration, embedding status, and made-for-kids status come only from the
   official YouTube Data API `videos.list` endpoint.
@@ -112,6 +121,8 @@ Relevant official references:
   validation
 - A Google Cloud project with YouTube Data API v3 enabled
 - A restricted YouTube Data API key
+- A reachable deployment of
+  [`Kevinmthau/video-grabber`](https://github.com/Kevinmthau/video-grabber)
 
 Simulator builds are useful for UI and deterministic tests. They are not
 sufficient evidence for CloudKit delivery, Share Sheet behavior across host
@@ -167,6 +178,33 @@ bundle-ID origin and passing the same origin to the IFrame Player API. YouTube
 player error `153` usually means that this client identity/referrer context is
 missing or rejected. Verify both the bundle identifier and API-key restriction
 before changing the player implementation.
+
+## video-grabber setup
+
+The checked-in app points at:
+
+```text
+https://twitter-video-grabber-production.up.railway.app/resolve
+```
+
+Change `VIDEO_GRABBER_ENDPOINT` in `ListenLater/Info.plist` if the Railway
+service moves. The current deployment requires `RESOLVE_API_TOKEN`; set its
+matching value only in the ignored `Config/Secrets.xcconfig`:
+
+```xcconfig
+VIDEO_GRABBER_API_TOKEN = YOUR_RESOLVE_API_TOKEN
+```
+
+The token is compiled into the personal iOS app and should be treated as an API
+credential, not as an unextractable secret. Rotate it if a distributed build is
+shared beyond trusted devices.
+
+The app posts the shared X or Instagram URL to `/resolve`, validates the returned
+public HTTPS media endpoint, and streams it with the native player. It does not
+save a copy into Photos or download the video for offline use. `video-grabber`
+direct URLs can expire quickly, so `QueueItem` stores an expiration time and
+automatically calls `/resolve` again before playback when needed. Private or
+protected posts still depend on the server’s `COOKIES_FILE` configuration.
 
 ## Signing, identifiers, and capabilities
 
@@ -279,7 +317,7 @@ web URL. It also attempts a plain-text URL when a host supplies text rather than
 After installing the containing app:
 
 1. Open MushRadio once.
-2. In Safari, Podcasts, YouTube, or another host app, open the Share Sheet.
+2. In X, Safari, Podcasts, YouTube, or another host app, open the Share Sheet.
 3. If needed, choose **More**, enable **Add to Queue**, and pin it to favorites.
 4. Share a public HTTPS URL and select **Add to Queue**.
 5. Wait for the “Added to Queue” confirmation, then activate MushRadio.
@@ -311,8 +349,9 @@ interruptions, pauses when an old output route becomes unavailable, and marks
 an item unavailable after a 30-second startup/rebuffer watchdog expires so the
 queue can continue. AirPlay and Bluetooth A2DP are enabled.
 
-These capabilities apply only to podcast audio. Do not enable or simulate
-background YouTube playback. See Apple’s
+Native X/Instagram playback uses the same engine and can keep audio active when
+the app backgrounds, although the video surface is visible only in the app.
+Do not enable or simulate background YouTube playback. See Apple’s
 [AVAudioSession guidance](https://developer.apple.com/documentation/avfaudio/avaudiosession)
 and [background execution modes](https://developer.apple.com/documentation/xcode/configuring-background-execution-modes).
 
@@ -362,10 +401,11 @@ xcodebuild \
   test
 ```
 
-The 64-test automated suite is deterministic and does not require a live API
+The 72-test automated suite is deterministic and does not require a live API
 key or network access:
 
-- `ProviderParsingTests` covers supported and hostile YouTube URL forms,
+- `ProviderParsingTests` covers supported and hostile YouTube and social-video
+  URL forms, video-grabber request/response behavior, expiration handling,
   canonicalization, and duration parsing.
 - `ProviderRegistryTests` covers provider dispatch plus invalid and unsupported
   URLs.
@@ -375,16 +415,17 @@ key or network access:
   and malformed XML.
 - `QueueStoreTests` uses an in-memory SwiftData container for append, reorder,
   Play Next, delete, played state, unavailable state, progress throttling,
-  YouTube completion boundaries, and refreshes from another model context.
+  YouTube completion boundaries, expiring social-video URLs, and refreshes from
+  another model context.
 - `PlaybackCoordinatorPodcastEngineTests` uses a fake podcast engine for resume,
-  completion, failure/skip, seeking, rate, and the foreground-only YouTube
-  boundary.
+  native social-video playback, completion, failure/skip, seeking, rate, and
+  the foreground-only YouTube boundary.
 - `SharedQueueInboxTests` verifies chronological atomic-file handoff and retry
   behavior, cross-process notifications, receipt-idempotent relaunch recovery,
   multi-receipt staging, and malformed-file quarantine.
 
 The provider adapters accept an injected `URLSession` so network response tests
-can be added without live services. Live YouTube, CloudKit, Share Sheet,
+run without live services. Live video-grabber, YouTube, CloudKit, Share Sheet,
 lock-screen, and Bluetooth behavior belong in the real-device checklist below.
 
 ## Real-device release checklist
@@ -393,7 +434,8 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
 
 - [ ] Install a non-demo build on two supported devices using the same iCloud
   account.
-- [ ] Confirm **CloudKit sync: Active** and **YouTube API: Configured**.
+- [ ] Confirm **CloudKit sync: Active**, **YouTube API: Configured**, and
+  **Social video resolver: Configured**.
 - [ ] Confirm an iOS-restricted key succeeds and rejected-key/quota errors are
   understandable.
 - [ ] Confirm the production build contains the intended app, extension, App
@@ -403,6 +445,12 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
 
 - [ ] Share one podcast episode URL from Safari or a podcast site.
 - [ ] Share Apple Podcasts and direct enclosure URLs.
+- [ ] From X, share a public status containing video and verify that it becomes
+  ready, plays inline, saves progress, and resumes after relaunch.
+- [ ] Wait at least five minutes before starting a queued X video and verify
+  that the direct media URL is transparently refreshed.
+- [ ] Verify protected/deleted X posts, a bad resolver token, resolver timeout,
+  and rate limiting produce understandable retryable states.
 - [ ] Share YouTube watch, short, live, mobile, and `youtu.be` URLs.
 - [ ] Confirm rapid extension completion and import when MushRadio activates.
 - [ ] Confirm unsupported, malformed, authenticated, deleted, and
@@ -452,11 +500,13 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
 ## Metadata retention and privacy release requirements
 
 The app stores the user’s original URLs, ordered queue, playback progress, and
-resolved metadata locally and in the user’s private CloudKit database. It
-parses a YouTube video ID from the user-provided URL. Public YouTube API data
-stored by the app includes title, channel name, thumbnail URL, duration,
-embeddability, and made-for-kids status. It does not currently request Google
-login or authorized YouTube account data.
+resolved metadata locally and in the user’s private CloudKit database. For
+social videos it also stores the temporary direct media URL and its expiration
+time; the durable identifier remains the original post URL. It parses a YouTube
+video ID from the user-provided URL. Public YouTube API data stored by the app
+includes title, channel name, thumbnail URL, duration, embeddability, and
+made-for-kids status. It does not currently request Google login or authorized
+YouTube account data.
 
 YouTube’s
 [Developer Policies](https://developers.google.com/youtube/terms/developer-policies)
@@ -487,7 +537,8 @@ release-required acceptance flow. The policy must, at minimum:
 - Explain that the visible YouTube player communicates playback context to
   YouTube/Google and may use cookies or similar device/browser storage.
 - Identify network requests to Google/YouTube, Apple’s Lookup API, podcast
-  publishers, RSS hosts, audio CDNs, artwork hosts, and Apple iCloud.
+  publishers, RSS hosts, audio/video CDNs, the configured video-grabber service,
+  X/Instagram media infrastructure, artwork hosts, and Apple iCloud.
 - Provide a developer contact and a clear deletion-request process.
 - If OAuth or authorized YouTube data is added later, link Google’s
   [security permissions page](https://security.google.com/settings/security/permissions),
@@ -509,6 +560,9 @@ privacy policy or legal terms.
   app.
 - Made-for-kids videos are conservatively handed to YouTube rather than embedded.
 - A valid API key and available quota are required to add new YouTube metadata.
+- X and Instagram support depends on the self-hosted video-grabber deployment,
+  its current `yt-dlp` compatibility, rate limits, and any cookies required for
+  protected content. Only save media you are authorized to access.
 - Generic podcast page resolution depends on a discoverable RSS/Atom link and a
   confident match to an episode enclosure. JavaScript-only pages, private feeds,
   paywalls, unusual feeds, and pages with no standards-based feed discovery can
@@ -525,7 +579,8 @@ privacy policy or legal terms.
   reorders or progress writes on several devices use normal SwiftData/CloudKit
   conflict behavior rather than a collaborative CRDT; foreground queue
   snapshots are refreshed every five seconds.
-- The MVP streams media and does not download podcasts for offline listening.
+- The MVP streams media and does not download podcasts or social videos for
+  offline listening.
 - There are no recommendations, discovery feeds, accounts, CarPlay UI, Apple
   Watch app, or macOS-specific interface.
 - CloudKit production schema promotion and the in-app YouTube privacy/terms

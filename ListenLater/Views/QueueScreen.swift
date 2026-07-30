@@ -68,7 +68,10 @@ struct QueueScreen: View {
                     PlaybackInfoView(
                         isCloudBacked: model.isCloudBacked,
                         persistenceNotice: model.persistenceNotice,
-                        youtubeIsConfigured: !AppConfiguration.youtubeAPIKey.isEmpty
+                        youtubeIsConfigured: !AppConfiguration.youtubeAPIKey.isEmpty,
+                        videoGrabberIsConfigured:
+                            AppConfiguration.videoGrabberEndpoint.scheme == "https"
+                            && !AppConfiguration.videoGrabberAPIToken.isEmpty
                     )
                 }
             }
@@ -107,7 +110,7 @@ struct QueueScreen: View {
             ContentUnavailableView {
                 Label("Your Queue Is Empty", systemImage: "text.line.first.and.arrowtriangle.forward")
             } description: {
-                Text("Share a podcast episode or YouTube video and choose “Add to Queue.”")
+                Text("Share an X video, podcast episode, Instagram video, or YouTube link and choose “Add to Queue.”")
             } actions: {
                 Button("Add a URL") {
                     presentedSheet = .addURL

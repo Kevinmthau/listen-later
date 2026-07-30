@@ -7,6 +7,7 @@ final class QueueItem {
     var originalURLString: String = ""
     var canonicalURLString: String = ""
     var playbackURLString: String?
+    var playbackURLExpiresAt: Date?
     var youtubeVideoID: String?
     var pendingShareReceiptIDString: String?
 
@@ -68,6 +69,15 @@ final class QueueItem {
 
     var artworkURL: URL? {
         artworkURLString.flatMap(URL.init(string:))
+    }
+
+    func playbackURLNeedsRefresh(
+        at date: Date = Date(),
+        safetyWindow: TimeInterval = 30
+    ) -> Bool {
+        guard source == .socialVideo else { return false }
+        guard playbackURL != nil, let playbackURLExpiresAt else { return true }
+        return playbackURLExpiresAt <= date.addingTimeInterval(safetyWindow)
     }
 
     var source: MediaSource {

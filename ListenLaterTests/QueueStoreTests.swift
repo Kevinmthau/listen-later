@@ -49,6 +49,62 @@ final class QueueStoreTests: XCTestCase {
         )
     }
 
+    func testAddAndRefreshSocialVideoUsesExpiringVideoGrabberURL() async throws {
+        let url = URL(
+            string: "https://x.com/OpenAI/status/1234567890123456789"
+        )!
+        let harness = try makeHarness(
+            providers: [
+                QueueStubProvider(
+                    source: .socialVideo,
+                    acceptedHost: "x.com"
+                )
+            ]
+        )
+
+        let addedResult = await harness.store.add(url: url)
+        let added = try XCTUnwrap(addedResult)
+        XCTAssertEqual(added.source, .socialVideo)
+        XCTAssertEqual(added.status, .ready)
+        XCTAssertEqual(
+            added.playbackURL,
+            URL(string: "https://cdn.example.com/1234567890123456789.mp4")
+        )
+        XCTAssertFalse(added.playbackURLNeedsRefresh())
+
+        added.playbackURLExpiresAt = .distantPast
+        XCTAssertTrue(added.playbackURLNeedsRefresh())
+        await harness.store.refreshPlaybackURL(for: added)
+
+        XCTAssertEqual(added.status, .ready)
+        XCTAssertFalse(added.playbackURLNeedsRefresh())
+    }
+
+    func testReaddingSameXStatusFromDifferentShareURLDoesNotDuplicate() async throws {
+        let harness = try makeHarness(
+            providers: [
+                QueueStubProvider(
+                    source: .socialVideo,
+                    acceptedHost: "x.com"
+                )
+            ]
+        )
+        let firstURL = URL(
+            string: "https://x.com/OpenAI/status/1234567890123456789?s=20"
+        )!
+        let secondURL = URL(
+            string: "https://twitter.com/OpenAI/status/1234567890123456789"
+        )!
+
+        let firstResult = await harness.store.add(url: firstURL)
+        let first = try XCTUnwrap(firstResult)
+        let secondResult = await harness.store.add(url: secondURL)
+        let second = try XCTUnwrap(secondResult)
+
+        XCTAssertEqual(harness.store.items.count, 1)
+        XCTAssertEqual(first.id, second.id)
+    }
+
     func testResumePendingResolutionAfterRelaunch() async throws {
         let url = URL(string: "https://podcasts.example/episodes/interrupted")!
         let harness = try makeHarness(
@@ -490,7 +546,10 @@ private struct QueueStubProvider: MediaProvider {
     let acceptedHost: String
 
     func canResolve(_ url: URL) -> Bool {
-        url.host == acceptedHost
+        if source == .socialVideo {
+            return SocialVideoURLParser.isSupported(url)
+        }
+        return url.host == acceptedHost
     }
 
     func resolve(_ url: URL) async throws -> ProviderResolvedItem {
@@ -510,6 +569,22 @@ private struct QueueStubProvider: MediaProvider {
                 source: .podcast,
                 playback: .remoteAudio(
                     URL(string: "https://cdn.example.com/\(slug).mp3")!
+                ),
+                isMadeForKids: false
+            )
+        case .socialVideo:
+            return ProviderResolvedItem(
+                originalURL: url,
+                canonicalURL: url,
+                title: "Resolved \(slug)",
+                creatorName: "@stub",
+                artworkURL: nil,
+                duration: nil,
+                publishedAt: nil,
+                source: .socialVideo,
+                playback: .remoteVideo(
+                    URL(string: "https://cdn.example.com/\(slug).mp4")!,
+                    expiresAt: Date().addingTimeInterval(240)
                 ),
                 isMadeForKids: false
             )

@@ -2,12 +2,15 @@ import Foundation
 
 enum ProviderSource: String, Codable, CaseIterable, Sendable {
     case podcast
+    case socialVideo
     case youtube
 
     var displayName: String {
         switch self {
         case .podcast:
             "Podcast"
+        case .socialVideo:
+            "Social Video"
         case .youtube:
             "YouTube"
         }
@@ -18,6 +21,7 @@ enum ProviderSource: String, Codable, CaseIterable, Sendable {
 /// with directly playable media URLs.
 enum ProviderPlaybackReference: Hashable, Codable, Sendable {
     case remoteAudio(URL)
+    case remoteVideo(URL, expiresAt: Date)
     case youtubeVideoID(String)
 
     var remoteAudioURL: URL? {
@@ -28,6 +32,16 @@ enum ProviderPlaybackReference: Hashable, Codable, Sendable {
     var youtubeVideoID: String? {
         guard case let .youtubeVideoID(videoID) = self else { return nil }
         return videoID
+    }
+
+    var remoteVideoURL: URL? {
+        guard case let .remoteVideo(url, _) = self else { return nil }
+        return url
+    }
+
+    var remoteVideoExpiresAt: Date? {
+        guard case let .remoteVideo(_, expiresAt) = self else { return nil }
+        return expiresAt
     }
 }
 
@@ -56,6 +70,8 @@ enum ProviderResolutionError: Error, Equatable, Sendable {
     case unsupportedURL(URL)
     case missingYouTubeAPIKey
     case invalidYouTubeVideoURL(URL)
+    case invalidSocialVideoURL(URL)
+    case videoGrabberUnauthorized
     case itemUnavailable(String)
     case youtubeVideoNotEmbeddable(String)
     case invalidHTTPResponse(URL)
@@ -79,6 +95,10 @@ extension ProviderResolutionError: LocalizedError {
             "The YouTube Data API key is not configured."
         case let .invalidYouTubeVideoURL(url):
             "The URL does not contain a valid YouTube video ID: \(url.absoluteString)"
+        case let .invalidSocialVideoURL(url):
+            "The URL is not a supported public X or Instagram video post: \(url.absoluteString)"
+        case .videoGrabberUnauthorized:
+            "The video resolver rejected its API token. Check the app’s video-grabber configuration."
         case let .itemUnavailable(reason):
             "The item is unavailable. \(reason)"
         case let .youtubeVideoNotEmbeddable(videoID):

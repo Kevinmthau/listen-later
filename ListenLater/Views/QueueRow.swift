@@ -9,10 +9,10 @@ struct QueueRow: View {
             ArtworkView(
                 url: item.artworkURL,
                 source: item.source,
-                size: item.source == .youtube ? 94 : 54
+                size: item.source.isVideo ? 94 : 54
             )
             .overlay(alignment: .bottomTrailing) {
-                if isCurrent, item.source != .youtube {
+                if isCurrent, item.source == .podcast {
                     Image(systemName: "waveform")
                         .font(.caption2.bold())
                         .foregroundStyle(.white)
@@ -105,7 +105,7 @@ struct ArtworkView: View {
             case let .success(image):
                 image
                     .resizable()
-                    .aspectRatio(contentMode: source == .youtube ? .fit : .fill)
+                    .aspectRatio(contentMode: source.isVideo ? .fit : .fill)
             case .empty:
                 placeholder
                     .overlay { ProgressView().controlSize(.small) }
@@ -116,16 +116,16 @@ struct ArtworkView: View {
             }
         }
         .frame(width: artworkWidth, height: artworkHeight)
-        .background(source == .youtube ? Color.black : Color.clear)
+        .background(source.isVideo ? Color.black : Color.clear)
         .clipShape(
             RoundedRectangle(
-                cornerRadius: source == .youtube ? 0 : size * 0.2,
+                cornerRadius: source.isVideo ? 4 : size * 0.2,
                 style: .continuous
             )
         )
         .overlay {
             RoundedRectangle(
-                cornerRadius: source == .youtube ? 0 : size * 0.2,
+                cornerRadius: source.isVideo ? 4 : size * 0.2,
                 style: .continuous
             )
                 .stroke(.primary.opacity(0.08), lineWidth: 1)
@@ -133,25 +133,34 @@ struct ArtworkView: View {
     }
 
     private var artworkWidth: CGFloat {
-        source == .youtube ? size * 1.35 : size
+        source.isVideo ? size * 1.35 : size
     }
 
     private var artworkHeight: CGFloat {
-        source == .youtube ? size * 0.76 : size
+        source.isVideo ? size * 0.76 : size
     }
 
     private var placeholder: some View {
         ZStack {
             LinearGradient(
-                colors: source == .youtube
-                    ? [Color(red: 0.45, green: 0.12, blue: 0.12), .red.opacity(0.75)]
-                    : [Color(red: 0.12, green: 0.25, blue: 0.33), .indigo.opacity(0.75)],
+                colors: placeholderColors,
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             Image(systemName: source.symbolName)
                 .font(.system(size: size * 0.34, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.94))
+        }
+    }
+
+    private var placeholderColors: [Color] {
+        switch source {
+        case .podcast:
+            [Color(red: 0.12, green: 0.25, blue: 0.33), .indigo.opacity(0.75)]
+        case .socialVideo:
+            [.black, Color(red: 0.08, green: 0.42, blue: 0.68)]
+        case .youtube:
+            [Color(red: 0.45, green: 0.12, blue: 0.12), .red.opacity(0.75)]
         }
     }
 }

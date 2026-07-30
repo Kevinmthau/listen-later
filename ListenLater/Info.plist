@@ -53,5 +53,9 @@
 	</array>
 	<key>YOUTUBE_API_KEY</key>
 	<string>$(YOUTUBE_API_KEY)</string>
+	<key>VIDEO_GRABBER_ENDPOINT</key>
+	<string>https://twitter-video-grabber-production.up.railway.app/resolve</string>
+	<key>VIDEO_GRABBER_API_TOKEN</key>
+	<string>$(VIDEO_GRABBER_API_TOKEN)</string>
 </dict>
 </plist>

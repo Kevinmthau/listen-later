@@ -28,7 +28,9 @@ final class AppModel {
             appGroupIdentifier: AppConfiguration.appGroupIdentifier
         )
         let providers = ProviderRegistry(
-            youtubeAPIKey: AppConfiguration.youtubeAPIKey
+            youtubeAPIKey: AppConfiguration.youtubeAPIKey,
+            videoGrabberEndpoint: AppConfiguration.videoGrabberEndpoint,
+            videoGrabberAPIToken: AppConfiguration.videoGrabberAPIToken
         )
         let queue = QueueStore(
             context: persistence.container.mainContext,

@@ -65,7 +65,7 @@ final class QueueStore {
         }
 
         if let existing = items.first(where: {
-            $0.originalURLString == url.absoluteString || $0.canonicalURLString == url.absoluteString
+            queueItem($0, matches: url)
         }) {
             let wasPlayed = existing.isPlayed
             existing.isPlayed = false
@@ -85,10 +85,19 @@ final class QueueStore {
         }
 
         let provider = providers.provider(for: url)
-        let source = provider?.source == .youtube ? MediaSource.youtube : .podcast
+        let source = provider.map { mediaSource(for: $0.source) } ?? .podcast
+        let placeholderTitle: String
+        switch source {
+        case .podcast:
+            placeholderTitle = "Podcast episode"
+        case .socialVideo:
+            placeholderTitle = "Social video"
+        case .youtube:
+            placeholderTitle = "YouTube video"
+        }
         let item = QueueItem(
             originalURL: url,
-            title: source == .youtube ? "YouTube video" : "Podcast episode",
+            title: placeholderTitle,
             source: source,
             sortRank: nextRank()
         )
@@ -103,6 +112,19 @@ final class QueueStore {
         item.unavailableReason = nil
         item.updatedAt = Date()
         saveAndRefresh()
+        await resolve(item)
+    }
+
+    func refreshPlaybackURL(for item: QueueItem) async {
+        guard item.source == .socialVideo,
+              self.item(id: item.id) != nil
+        else {
+            return
+        }
+        item.status = .resolving
+        item.unavailableReason = nil
+        item.updatedAt = Date()
+        guard saveAndRefresh() else { return }
         await resolve(item)
     }
 
@@ -258,7 +280,7 @@ final class QueueStore {
 
     func markPlayed(_ item: QueueItem) {
         item.isPlayed = true
-        if item.source == .podcast, item.duration > 0 {
+        if item.source != .youtube, item.duration > 0 {
             item.playbackPosition = item.duration
         }
         item.updatedAt = Date()
@@ -308,7 +330,7 @@ final class QueueStore {
         if let rate {
             item.playbackRate = rate
         }
-        if item.source == .podcast {
+        if item.source != .youtube {
             let completionThreshold = item.duration > 10
                 ? item.duration - 2
                 : item.duration * 0.95
@@ -361,7 +383,7 @@ final class QueueStore {
     }
 
     func appendResolvedForTesting(_ resolved: ProviderResolvedItem) -> QueueItem {
-        let source: MediaSource = resolved.source == .youtube ? .youtube : .podcast
+        let source = mediaSource(for: resolved.source)
         let item = QueueItem(
             originalURL: resolved.originalURL,
             canonicalURL: resolved.canonicalURL,
@@ -460,7 +482,8 @@ final class QueueStore {
                 switch providerError {
                 case .itemUnavailable,
                      .youtubeVideoNotEmbeddable,
-                     .invalidYouTubeVideoURL:
+                     .invalidYouTubeVideoURL,
+                     .invalidSocialVideoURL:
                     return true
                 default:
                     return false
@@ -500,7 +523,7 @@ final class QueueStore {
         } else if let duration = resolved.duration {
             item.duration = duration
         }
-        item.source = resolved.source == .youtube ? .youtube : .podcast
+        item.source = mediaSource(for: resolved.source)
         item.status = .ready
         item.unavailableReason = nil
         item.metadataFetchedAt = Date()
@@ -510,10 +533,16 @@ final class QueueStore {
         switch resolved.playback {
         case let .remoteAudio(url):
             item.playbackURLString = url.absoluteString
+            item.playbackURLExpiresAt = nil
+            item.youtubeVideoID = nil
+        case let .remoteVideo(url, expiresAt):
+            item.playbackURLString = url.absoluteString
+            item.playbackURLExpiresAt = expiresAt
             item.youtubeVideoID = nil
         case let .youtubeVideoID(videoID):
             item.youtubeVideoID = videoID
             item.playbackURLString = nil
+            item.playbackURLExpiresAt = nil
         }
         item.updatedAt = Date()
     }
@@ -536,6 +565,33 @@ final class QueueStore {
     private func evictArtworkCache(for item: QueueItem) {
         guard item.source == .youtube, let artworkURL = item.artworkURL else { return }
         URLCache.shared.removeCachedResponse(for: URLRequest(url: artworkURL))
+    }
+
+    private func mediaSource(for providerSource: ProviderSource) -> MediaSource {
+        switch providerSource {
+        case .podcast:
+            .podcast
+        case .socialVideo:
+            .socialVideo
+        case .youtube:
+            .youtube
+        }
+    }
+
+    private func queueItem(_ item: QueueItem, matches url: URL) -> Bool {
+        if item.originalURLString == url.absoluteString
+            || item.canonicalURLString == url.absoluteString
+        {
+            return true
+        }
+        guard let candidate = SocialVideoURLParser.parse(url),
+              let existingURL = item.originalURL,
+              let existing = SocialVideoURLParser.parse(existingURL)
+        else {
+            return false
+        }
+        return candidate.platform == existing.platform
+            && candidate.mediaID == existing.mediaID
     }
 
     private func nextRank() -> Double {

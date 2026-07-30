@@ -14,6 +14,19 @@ enum AppConfiguration {
         let value = Bundle.main.object(forInfoDictionaryKey: "YOUTUBE_API_KEY") as? String
         return value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }()
+
+    static let videoGrabberEndpoint: URL = {
+        let value =
+            Bundle.main.object(forInfoDictionaryKey: "VIDEO_GRABBER_ENDPOINT") as? String
+        return value.flatMap(URL.init(string:))
+            ?? VideoGrabberConfiguration.defaultEndpoint
+    }()
+
+    static let videoGrabberAPIToken: String = {
+        let value =
+            Bundle.main.object(forInfoDictionaryKey: "VIDEO_GRABBER_API_TOKEN") as? String
+        return value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }()
 }
 
 enum PersistenceController {

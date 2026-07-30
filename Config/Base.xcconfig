@@ -2,7 +2,7 @@
 APP_GROUP_IDENTIFIER = group.com.kevinthau.ListenLater
 ICLOUD_CONTAINER_IDENTIFIER = iCloud.com.kevinthau.ListenLater
 YOUTUBE_API_KEY =
+VIDEO_GRABBER_API_TOKEN =
 
-// A local Secrets.xcconfig can override YOUTUBE_API_KEY.
+// A local Secrets.xcconfig can override API credentials.
 #include? "Secrets.xcconfig"
-

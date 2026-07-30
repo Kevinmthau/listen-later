@@ -12,6 +12,7 @@ enum PodcastPlaybackEvent: Equatable {
 protocol PodcastPlaybackEngine: AnyObject {
     var eventHandler: ((UUID, PodcastPlaybackEvent) -> Void)? { get set }
     var isPlaying: Bool { get }
+    var renderingPlayer: AVPlayer? { get }
 
     func load(
         url: URL,
@@ -23,6 +24,10 @@ protocol PodcastPlaybackEngine: AnyObject {
     func pause()
     func seek(to time: TimeInterval)
     func setRate(_ rate: Float)
+}
+
+extension PodcastPlaybackEngine {
+    var renderingPlayer: AVPlayer? { nil }
 }
 
 @MainActor
@@ -45,6 +50,10 @@ final class AVPlayerPodcastEngine: PodcastPlaybackEngine {
 
     var isPlaying: Bool {
         player.timeControlStatus == .playing
+    }
+
+    var renderingPlayer: AVPlayer? {
+        player
     }
 
     init(

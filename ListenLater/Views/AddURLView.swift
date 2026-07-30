@@ -16,11 +16,11 @@ struct AddURLView: View {
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
                         .autocorrectionDisabled()
-                        .accessibilityLabel("Podcast or YouTube URL")
+                        .accessibilityLabel("Podcast, X video, Instagram video, or YouTube URL")
                 } header: {
-                    Text("Podcast or YouTube URL")
+                    Text("Podcast or Video URL")
                 } footer: {
-                    Text("The Share Sheet is the fastest way to add items. This field is useful for pasted links.")
+                    Text("Paste a podcast, X, Instagram, or YouTube link. The Share Sheet is usually faster.")
                 }
 
                 if let validationMessage {
@@ -80,6 +80,7 @@ struct PlaybackInfoView: View {
     let isCloudBacked: Bool
     let persistenceNotice: String?
     let youtubeIsConfigured: Bool
+    let videoGrabberIsConfigured: Bool
 
     @Environment(\.dismiss) private var dismiss
 
@@ -90,6 +91,10 @@ struct PlaybackInfoView: View {
                     Label(
                         "Podcasts continue in the background and use lock-screen and Bluetooth controls.",
                         systemImage: "headphones"
+                    )
+                    Label(
+                        "X and Instagram videos are resolved by your video-grabber service and play in the app.",
+                        systemImage: "play.square.stack"
                     )
                     Label(
                         "YouTube videos use the official visible player and pause when this app is not on screen.",
@@ -108,6 +113,10 @@ struct PlaybackInfoView: View {
                     LabeledContent("YouTube API") {
                         Text(youtubeIsConfigured ? "Configured" : "Key required")
                             .foregroundStyle(youtubeIsConfigured ? .green : .orange)
+                    }
+                    LabeledContent("Social video resolver") {
+                        Text(videoGrabberIsConfigured ? "Configured" : "Token required")
+                            .foregroundStyle(videoGrabberIsConfigured ? .green : .orange)
                     }
                     if let persistenceNotice, !isCloudBacked {
                         Text(persistenceNotice)

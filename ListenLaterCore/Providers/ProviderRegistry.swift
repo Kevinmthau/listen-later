@@ -11,13 +11,21 @@ struct ProviderRegistry: Sendable {
 
     init(
         youtubeAPIKey: String,
+        videoGrabberEndpoint: URL = VideoGrabberConfiguration.defaultEndpoint,
+        videoGrabberAPIToken: String = "",
         podcastSession: URLSession = .shared,
-        youtubeSession: URLSession? = nil
+        youtubeSession: URLSession? = nil,
+        videoGrabberSession: URLSession? = nil
     ) {
         self.providers = [
             YouTubeProviderAdapter(
                 apiKey: youtubeAPIKey,
                 session: youtubeSession
+            ),
+            VideoGrabberProviderAdapter(
+                endpoint: videoGrabberEndpoint,
+                apiToken: videoGrabberAPIToken,
+                session: videoGrabberSession
             ),
             PodcastProviderAdapter(session: podcastSession)
         ]
@@ -52,6 +60,17 @@ struct ProviderRegistry: Sendable {
         case let .remoteAudio(candidate):
             playback = .remoteAudio(
                 try await endpointClient.resolvedEndpointURL(for: candidate)
+            )
+        case let .remoteVideo(candidate, expiresAt):
+            let resolvedURL = try await endpointClient.resolvedEndpointURL(
+                for: candidate
+            )
+            playback = .remoteVideo(
+                resolvedURL,
+                expiresAt: min(
+                    expiresAt,
+                    SocialVideoPlaybackURL.expirationDate(for: resolvedURL)
+                )
             )
         case .youtubeVideoID:
             playback = resolved.playback
