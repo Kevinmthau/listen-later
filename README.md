@@ -362,13 +362,15 @@ xcodebuild \
   test
 ```
 
-The 59-test automated suite is deterministic and does not require a live API
+The 64-test automated suite is deterministic and does not require a live API
 key or network access:
 
 - `ProviderParsingTests` covers supported and hostile YouTube URL forms,
   canonicalization, and duration parsing.
 - `ProviderRegistryTests` covers provider dispatch plus invalid and unsupported
   URLs.
+- `ProviderHTTPClientTests` covers controlled redirects and private-endpoint
+  rejection without live network access.
 - `RSSFeedTests` covers RSS/Atom fixtures, enclosures, metadata, matching hints,
   and malformed XML.
 - `QueueStoreTests` uses an in-memory SwiftData container for append, reorder,

@@ -178,6 +178,22 @@ final class QueueStoreTests: XCTestCase {
         )
     }
 
+    func testMoveToPlayNextLeavesCurrentItemInPlace() throws {
+        let harness = try makeHarness()
+        let first = appendItem(to: harness.store, ordinal: 1)
+        let second = appendItem(to: harness.store, ordinal: 2)
+        let third = appendItem(to: harness.store, ordinal: 3)
+        let originalRanks = harness.store.items.map(\.sortRank)
+
+        harness.store.moveToPlayNext(second, after: second.id)
+
+        XCTAssertEqual(
+            harness.store.items.map(\.id),
+            [first.id, second.id, third.id]
+        )
+        XCTAssertEqual(harness.store.items.map(\.sortRank), originalRanks)
+    }
+
     func testMarkPlayedMarkUnplayedAndDelete() throws {
         let harness = try makeHarness()
         let first = appendItem(to: harness.store, ordinal: 1, duration: 300)
@@ -320,6 +336,13 @@ final class QueueStoreTests: XCTestCase {
                 item.unavailableReason,
                 "YouTube metadata expired and could not be refreshed."
             )
+
+            harness.store.lastErrorMessage = nil
+            await harness.store.refreshExpiredYouTubeMetadata(now: now)
+            XCTAssertNil(
+                harness.store.lastErrorMessage,
+                "Purged unavailable metadata should wait for manual retry."
+            )
         }
     }
 
@@ -370,6 +393,20 @@ final class QueueStoreTests: XCTestCase {
         )
         XCTAssertEqual(item.title, "API title")
         XCTAssertNotNil(item.metadataFetchedAt)
+
+        harness.store.lastErrorMessage = nil
+        await harness.store.refreshExpiredYouTubeMetadata(now: now)
+        XCTAssertNil(
+            harness.store.lastErrorMessage,
+            "Terminally unavailable metadata should not retry automatically."
+        )
+
+        await harness.store.refreshExpiredYouTubeMetadata(
+            now: now.addingTimeInterval(24 * 60 * 60)
+        )
+        XCTAssertEqual(item.title, "YouTube video")
+        XCTAssertNil(item.metadataFetchedAt)
+        XCTAssertNil(harness.store.lastErrorMessage)
     }
 }
 

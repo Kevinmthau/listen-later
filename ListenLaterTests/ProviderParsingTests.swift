@@ -230,6 +230,63 @@ final class ProviderRegistryTests: XCTestCase {
     }
 }
 
+final class ProviderHTTPClientTests: XCTestCase {
+    override func tearDown() {
+        HTTPClientURLProtocol.responses.removeAll()
+        super.tearDown()
+    }
+
+    func testResolvedEndpointFollowsValidatedRedirects() async throws {
+        let startURL = URL(string: "https://public.example/start")!
+        let finalURL = URL(string: "https://media.example/audio.mp3")!
+        HTTPClientURLProtocol.responses.set([
+            startURL: .redirect(to: finalURL),
+            finalURL: .success()
+        ])
+        let client = makeClient()
+
+        let resolved = try await client.resolvedEndpointURL(for: startURL)
+
+        XCTAssertEqual(resolved, finalURL)
+        XCTAssertEqual(
+            HTTPClientURLProtocol.responses.requestedURLs,
+            [startURL, finalURL]
+        )
+    }
+
+    func testResolvedEndpointRejectsRedirectToPrivateAddress() async throws {
+        let startURL = URL(string: "https://public.example/start")!
+        let privateURL = URL(string: "https://127.0.0.1/audio.mp3")!
+        HTTPClientURLProtocol.responses.set([
+            startURL: .redirect(to: privateURL)
+        ])
+        let client = makeClient()
+
+        do {
+            _ = try await client.resolvedEndpointURL(for: startURL)
+            XCTFail("Expected the private redirect to be rejected.")
+        } catch let error as ProviderResolutionError {
+            guard case .invalidURL = error else {
+                return XCTFail("Unexpected provider error: \(error)")
+            }
+        }
+
+        XCTAssertEqual(
+            HTTPClientURLProtocol.responses.requestedURLs,
+            [startURL]
+        )
+    }
+
+    private func makeClient() -> ProviderHTTPClient {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [HTTPClientURLProtocol.self]
+        return ProviderHTTPClient(
+            session: URLSession(configuration: configuration),
+            validateEndpoint: { _ in }
+        )
+    }
+}
+
 private struct StubMediaProvider: MediaProvider {
     let source: ProviderSource
     let acceptedHost: String
@@ -289,4 +346,89 @@ private func XCTAssertThrowsProviderError(
     } catch {
         XCTFail("Unexpected error: \(error)", file: file, line: line)
     }
+}
+
+private final class HTTPClientURLProtocol: URLProtocol, @unchecked Sendable {
+    struct Response {
+        let statusCode: Int
+        let headers: [String: String]
+
+        static func redirect(to url: URL) -> Self {
+            Self(statusCode: 302, headers: ["Location": url.absoluteString])
+        }
+
+        static func success() -> Self {
+            Self(statusCode: 200, headers: [:])
+        }
+    }
+
+    final class ResponseStore: @unchecked Sendable {
+        private let lock = NSLock()
+        private var values: [URL: Response] = [:]
+        private var requests: [URL] = []
+
+        var requestedURLs: [URL] {
+            lock.lock()
+            defer { lock.unlock() }
+            return requests
+        }
+
+        func set(_ values: [URL: Response]) {
+            lock.lock()
+            self.values = values
+            requests = []
+            lock.unlock()
+        }
+
+        func removeAll() {
+            lock.lock()
+            values = [:]
+            requests = []
+            lock.unlock()
+        }
+
+        func response(for url: URL) -> Response? {
+            lock.lock()
+            defer { lock.unlock() }
+            requests.append(url)
+            return values[url]
+        }
+    }
+
+    static let responses = ResponseStore()
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url != nil
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let url = request.url,
+              let stub = Self.responses.response(for: url),
+              let response = HTTPURLResponse(
+                  url: url,
+                  statusCode: stub.statusCode,
+                  httpVersion: "HTTP/1.1",
+                  headerFields: stub.headers
+              )
+        else {
+            client?.urlProtocol(
+                self,
+                didFailWithError: URLError(.resourceUnavailable)
+            )
+            return
+        }
+
+        client?.urlProtocol(
+            self,
+            didReceive: response,
+            cacheStoragePolicy: .notAllowed
+        )
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }

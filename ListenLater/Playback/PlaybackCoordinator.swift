@@ -163,7 +163,10 @@ final class PlaybackCoordinator {
         currentItemID = item.id
         preparedItemID = nil
         pendingResolutionAutoplayItemID = nil
-        position = item.isPlayed ? 0 : item.playbackPosition
+        if item.isPlayed {
+            queue.markUnplayed(item)
+        }
+        position = item.playbackPosition
         duration = item.duration
         playbackRate = item.playbackRate > 0 ? item.playbackRate : 1
         item.lastPlayedAt = Date()
@@ -487,6 +490,13 @@ final class PlaybackCoordinator {
             activePodcastLoadID = nil
             queue.markPlayed(item)
             advance(from: item)
+        case let .stalled(message):
+            activePodcastLoadID = nil
+            preparedItemID = nil
+            transportState = .needsUserAction
+            notice = "\(message) Tap Play to retry."
+            saveCurrentProgress(force: true)
+            updateNowPlaying()
         case let .failed(message):
             activePodcastLoadID = nil
             queue.markUnavailable(item, reason: message)
@@ -672,6 +682,9 @@ final class PlaybackCoordinator {
             queue: .main
         ) { [weak self] notification in
             let rawValue = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            let rawOptions =
+                notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt
+                ?? 0
             Task { @MainActor in
                 guard
                     let rawValue,
@@ -686,9 +699,6 @@ final class PlaybackCoordinator {
                     self.pause()
                 case .ended:
                     guard let self else { return }
-                    let rawOptions =
-                        notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt
-                        ?? 0
                     let options = AVAudioSession.InterruptionOptions(rawValue: rawOptions)
                     let shouldResume = options.contains(.shouldResume)
                     let resume = self.wasPlayingBeforeInterruption && shouldResume

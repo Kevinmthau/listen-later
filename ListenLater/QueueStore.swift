@@ -193,8 +193,23 @@ final class QueueStore {
 
     func refreshExpiredYouTubeMetadata(now: Date = Date()) async {
         let expiration = now.addingTimeInterval(-29 * 24 * 60 * 60)
+        let policyExpiration = now.addingTimeInterval(-30 * 24 * 60 * 60)
+
+        // An unavailable item has already failed terminal resolution. Retrying
+        // it on every activation wastes quota, but any retained API metadata
+        // still has to be removed once it reaches the policy deadline.
+        let unavailableExpired = items.filter {
+            $0.source == .youtube
+                && $0.status == .unavailable
+                && $0.metadataFetchedAt.map { $0 <= policyExpiration } == true
+        }
+        for item in unavailableExpired {
+            purgeExpiredYouTubeMetadata(item)
+        }
+
         let stale = items.filter {
             $0.source == .youtube
+                && $0.status == .ready
                 && ($0.metadataFetchedAt == nil || $0.metadataFetchedAt! < expiration)
         }
         for item in stale {
@@ -219,6 +234,7 @@ final class QueueStore {
     }
 
     func moveToPlayNext(_ item: QueueItem, after currentID: UUID?) {
+        guard item.id != currentID else { return }
         var reordered = items.filter { $0.id != item.id }
         let insertionIndex: Int
         if
@@ -452,18 +468,7 @@ final class QueueStore {
             }()
 
             if mustDeleteExpiredYouTubeMetadata {
-                evictArtworkCache(for: liveItem)
-                liveItem.title = "YouTube video"
-                liveItem.subtitle = ""
-                liveItem.artworkURLString = nil
-                liveItem.duration = 0
-                liveItem.metadataFetchedAt = nil
-                liveItem.youtubeMadeForKids = false
-                liveItem.youtubeEmbeddable = false
-                liveItem.status = .unavailable
-                liveItem.unavailableReason = "YouTube metadata expired and could not be refreshed."
-                liveItem.updatedAt = Date()
-                saveAndRefresh()
+                purgeExpiredYouTubeMetadata(liveItem)
             } else if !preserveAvailabilityOnTransientFailure
                         || isTerminalProviderFailure
             {
@@ -511,6 +516,21 @@ final class QueueStore {
             item.playbackURLString = nil
         }
         item.updatedAt = Date()
+    }
+
+    private func purgeExpiredYouTubeMetadata(_ item: QueueItem) {
+        evictArtworkCache(for: item)
+        item.title = "YouTube video"
+        item.subtitle = ""
+        item.artworkURLString = nil
+        item.duration = 0
+        item.metadataFetchedAt = nil
+        item.youtubeMadeForKids = false
+        item.youtubeEmbeddable = false
+        item.status = .unavailable
+        item.unavailableReason = "YouTube metadata expired and could not be refreshed."
+        item.updatedAt = Date()
+        saveAndRefresh()
     }
 
     private func evictArtworkCache(for item: QueueItem) {
