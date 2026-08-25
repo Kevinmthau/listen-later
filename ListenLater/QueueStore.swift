@@ -67,8 +67,11 @@ final class QueueStore {
         if let existing = items.first(where: {
             queueItem($0, matches: url)
         }) {
-            let wasPlayed = existing.isPlayed
+            let wasPlayed = existing.isInPlayedSection
             existing.isPlayed = false
+            if existing.source.isVideo {
+                existing.lastPlayedAt = nil
+            }
             if wasPlayed {
                 existing.playbackPosition = 0
             }
@@ -255,6 +258,27 @@ final class QueueStore {
         applyRanks(to: reordered)
     }
 
+    func moveUpNext(from source: IndexSet, to destination: Int) {
+        guard !source.isEmpty else { return }
+        var reorderedUpNext = items.filter { !$0.isInPlayedSection }
+        let moving = source.sorted().map { reorderedUpNext[$0] }
+        for index in source.sorted(by: >) {
+            reorderedUpNext.remove(at: index)
+        }
+        let removedBeforeDestination = source.filter { $0 < destination }.count
+        let insertionIndex = min(
+            max(0, destination - removedBeforeDestination),
+            reorderedUpNext.count
+        )
+        reorderedUpNext.insert(contentsOf: moving, at: insertionIndex)
+
+        var upNextIterator = reorderedUpNext.makeIterator()
+        let reordered = items.compactMap { item in
+            item.isInPlayedSection ? item : upNextIterator.next()
+        }
+        applyRanks(to: reordered)
+    }
+
     func moveToPlayNext(_ item: QueueItem, after currentID: UUID?) {
         guard item.id != currentID else { return }
         var reordered = items.filter { $0.id != item.id }
@@ -280,6 +304,7 @@ final class QueueStore {
 
     func markPlayed(_ item: QueueItem) {
         item.isPlayed = true
+        item.lastPlayedAt = Date()
         if item.source != .youtube, item.duration > 0 {
             item.playbackPosition = item.duration
         }
@@ -290,9 +315,17 @@ final class QueueStore {
 
     func markUnplayed(_ item: QueueItem) {
         item.isPlayed = false
+        item.lastPlayedAt = nil
         item.playbackPosition = 0
         item.updatedAt = Date()
         item.progressUpdatedAt = Date()
+        saveAndRefresh()
+    }
+
+    func recordPlaybackStarted(for item: QueueItem) {
+        guard item.source.isVideo else { return }
+        item.lastPlayedAt = Date()
+        item.updatedAt = Date()
         saveAndRefresh()
     }
 
@@ -353,7 +386,7 @@ final class QueueStore {
     }
 
     func firstUnplayed() -> QueueItem? {
-        items.first { !$0.isPlayed && $0.status != .unavailable }
+        items.first { !$0.isInPlayedSection && $0.status != .unavailable }
     }
 
     func resumeCandidate() -> QueueItem? {
@@ -373,7 +406,7 @@ final class QueueStore {
             return firstUnplayed()
         }
         return items.dropFirst(currentIndex + 1).first {
-            !$0.isPlayed && $0.status != .unavailable
+            !$0.isInPlayedSection && $0.status != .unavailable
         }
     }
 

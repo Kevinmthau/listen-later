@@ -69,6 +69,9 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
             harness.engine.loads.last?.url,
             URL(string: "https://cdn.example.com/social/1.mp4")
         )
+        XCTAssertTrue(item.isInPlayedSection)
+        XCTAssertNotNil(item.lastPlayedAt)
+        XCTAssertFalse(item.isPlayed)
 
         item.progressUpdatedAt = .distantPast
         harness.engine.emit(.timeChanged(position: 45, duration: 120))
@@ -79,6 +82,22 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         harness.engine.emit(.ended)
         XCTAssertTrue(item.isPlayed)
         XCTAssertEqual(item.playbackPosition, 120)
+    }
+
+    func testReorderingUpNextWhileVideoPlaysStillAdvancesToFirstItem() throws {
+        let harness = try makeHarness()
+        let video = appendSocialVideo(to: harness.queue, ordinal: 1)
+        let second = appendPodcast(to: harness.queue, ordinal: 2, duration: 300)
+        let third = appendPodcast(to: harness.queue, ordinal: 3, duration: 600)
+
+        harness.coordinator.start(video)
+        harness.queue.moveUpNext(from: IndexSet(integer: 1), to: 0)
+        harness.engine.emit(.ended)
+
+        XCTAssertEqual(harness.coordinator.currentItemID, third.id)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+        XCTAssertEqual(harness.engine.loads.last?.url, third.playbackURL)
+        XCTAssertEqual(harness.queue.items.map(\.id), [video.id, third.id, second.id])
     }
 
     func testCompletedPodcastIsNotRevertedByAutomaticAdvanceProgressSave() throws {
@@ -327,6 +346,17 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(item.playbackPosition, 0)
         XCTAssertEqual(harness.coordinator.position, 0)
         XCTAssertEqual(harness.coordinator.currentItemID, item.id)
+    }
+
+    func testLoadingYouTubeDoesNotMoveItToPlayedBeforePlaybackBegins() throws {
+        let harness = try makeHarness()
+        let item = appendYouTube(to: harness.queue, ordinal: 1)
+
+        harness.coordinator.start(item)
+
+        XCTAssertFalse(item.isInPlayedSection)
+        XCTAssertNil(item.lastPlayedAt)
+        XCTAssertEqual(harness.coordinator.transportState, .loading)
     }
 
     func testPodcastWatchdogStallRemainsRetryable() throws {

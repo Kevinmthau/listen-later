@@ -47,7 +47,7 @@ struct QueueScreen: View {
                 }
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    if !model.queue.items.isEmpty {
+                    if upNextItems.count > 1 {
                         EditButton()
                     }
                     Button {
@@ -120,99 +120,27 @@ struct QueueScreen: View {
             .frame(maxHeight: .infinity)
         } else {
             List {
-                Section {
-                    ForEach(model.queue.items) { item in
-                        QueueRow(
-                            item: item,
-                            isCurrent: model.playback.currentItemID == item.id
-                        )
-                        .contentShape(Rectangle())
-                        .onTapGesture { select(item) }
-                        .listRowBackground(
-                            model.playback.currentItemID == item.id
-                                ? Color.accentColor.opacity(0.09)
-                                : Color(uiColor: .secondarySystemGroupedBackground)
-                        )
-                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                            if model.playback.currentItemID != item.id {
-                                Button {
-                                    model.queue.moveToPlayNext(
-                                        item,
-                                        after: model.playback.currentItemID
-                                    )
-                                } label: {
-                                    Label("Play Next", systemImage: "text.insert")
-                                }
-                                .tint(.indigo)
-                            }
+                if !upNextItems.isEmpty {
+                    Section {
+                        ForEach(upNextItems) { item in
+                            queueRow(item)
                         }
-                        .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) {
-                                model.queue.delete(item)
-                                model.playback.currentItemWasDeleted()
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-
-                            Button {
-                                togglePlayed(item)
-                            } label: {
-                                Label(
-                                    item.isPlayed ? "Unplayed" : "Played",
-                                    systemImage: item.isPlayed
-                                        ? "arrow.counterclockwise"
-                                        : "checkmark"
-                                )
-                            }
-                            .tint(item.isPlayed ? .orange : .green)
+                        .onMove(perform: model.queue.moveUpNext)
+                    } header: {
+                        HStack {
+                            Text("Up Next")
+                            Spacer()
+                            Text(queueSummary)
+                                .textCase(nil)
                         }
-                        .contextMenu {
-                            if model.playback.currentItemID != item.id {
-                                Button {
-                                    model.queue.moveToPlayNext(
-                                        item,
-                                        after: model.playback.currentItemID
-                                    )
-                                } label: {
-                                    Label("Play Next", systemImage: "text.insert")
-                                }
-                            }
-
-                            Button {
-                                togglePlayed(item)
-                            } label: {
-                                Label(
-                                    item.isPlayed ? "Mark Unplayed" : "Mark Played",
-                                    systemImage: item.isPlayed
-                                        ? "arrow.counterclockwise"
-                                        : "checkmark.circle"
-                                )
-                            }
-
-                            if item.status == .unavailable {
-                                Button {
-                                    Task { await model.queue.retry(item) }
-                                } label: {
-                                    Label("Retry", systemImage: "arrow.clockwise")
-                                }
-                            }
-
-                            Button(role: .destructive) {
-                                model.queue.delete(item)
-                                model.playback.currentItemWasDeleted()
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
-                        .accessibilityIdentifier("queue-item-\(item.id.uuidString)")
                     }
-                    .onMove(perform: model.queue.move)
-                } header: {
-                    HStack {
-                        Text("Up Next")
-                        Spacer()
-                        Text(queueSummary)
-                            .textCase(nil)
+                }
+
+                if !playedItems.isEmpty {
+                    Section("Played") {
+                        ForEach(playedItems) { item in
+                            queueRow(item)
+                        }
                     }
                 }
             }
@@ -222,8 +150,108 @@ struct QueueScreen: View {
     }
 
     private var queueSummary: String {
-        let unplayed = model.queue.items.filter { !$0.isPlayed }.count
-        return "\(unplayed)"
+        "\(upNextItems.count)"
+    }
+
+    private var upNextItems: [QueueItem] {
+        model.queue.items.filter { !$0.isInPlayedSection }
+    }
+
+    private var playedItems: [QueueItem] {
+        model.queue.items
+            .filter(\.isInPlayedSection)
+            .sorted {
+                ($0.lastPlayedAt ?? $0.updatedAt)
+                    < ($1.lastPlayedAt ?? $1.updatedAt)
+            }
+    }
+
+    private func queueRow(_ item: QueueItem) -> some View {
+        QueueRow(
+            item: item,
+            isCurrent: model.playback.currentItemID == item.id
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { select(item) }
+        .listRowBackground(
+            model.playback.currentItemID == item.id
+                ? Color.accentColor.opacity(0.09)
+                : Color(uiColor: .secondarySystemGroupedBackground)
+        )
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            if model.playback.currentItemID != item.id,
+               !item.isInPlayedSection {
+                Button {
+                    model.queue.moveToPlayNext(
+                        item,
+                        after: model.playback.currentItemID
+                    )
+                } label: {
+                    Label("Play Next", systemImage: "text.insert")
+                }
+                .tint(.indigo)
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive) {
+                model.queue.delete(item)
+                model.playback.currentItemWasDeleted()
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+
+            Button {
+                togglePlayed(item)
+            } label: {
+                Label(
+                    item.isInPlayedSection ? "Unplayed" : "Played",
+                    systemImage: item.isInPlayedSection
+                        ? "arrow.counterclockwise"
+                        : "checkmark"
+                )
+            }
+            .tint(item.isInPlayedSection ? .orange : .green)
+        }
+        .contextMenu {
+            if model.playback.currentItemID != item.id,
+               !item.isInPlayedSection {
+                Button {
+                    model.queue.moveToPlayNext(
+                        item,
+                        after: model.playback.currentItemID
+                    )
+                } label: {
+                    Label("Play Next", systemImage: "text.insert")
+                }
+            }
+
+            Button {
+                togglePlayed(item)
+            } label: {
+                Label(
+                    item.isInPlayedSection ? "Mark Unplayed" : "Mark Played",
+                    systemImage: item.isInPlayedSection
+                        ? "arrow.counterclockwise"
+                        : "checkmark.circle"
+                )
+            }
+
+            if item.status == .unavailable {
+                Button {
+                    Task { await model.queue.retry(item) }
+                } label: {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                }
+            }
+
+            Button(role: .destructive) {
+                model.queue.delete(item)
+                model.playback.currentItemWasDeleted()
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .accessibilityIdentifier("queue-item-\(item.id.uuidString)")
     }
 
     private func select(_ item: QueueItem) {
@@ -235,7 +263,7 @@ struct QueueScreen: View {
     }
 
     private func togglePlayed(_ item: QueueItem) {
-        if item.isPlayed {
+        if item.isInPlayedSection {
             model.queue.markUnplayed(item)
         } else if model.playback.currentItemID == item.id {
             model.playback.playNext()

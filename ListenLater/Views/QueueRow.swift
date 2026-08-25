@@ -23,7 +23,7 @@ struct QueueRow: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(item.title)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(item.isPlayed ? .secondary : .primary)
+                    .foregroundStyle(item.isInPlayedSection ? .secondary : .primary)
                     .lineLimit(2)
 
                 HStack(spacing: 6) {
@@ -49,7 +49,7 @@ struct QueueRow: View {
                 .accessibilityHidden(true)
         }
         .padding(.vertical, 5)
-        .opacity(item.isPlayed ? 0.72 : 1)
+        .opacity(item.isInPlayedSection ? 0.72 : 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
     }
@@ -81,7 +81,7 @@ struct QueueRow: View {
             Label("Unavailable · tap to retry", systemImage: "exclamationmark.circle")
                 .foregroundStyle(.red)
         case .ready:
-            if item.isPlayed {
+            if item.isInPlayedSection {
                 Label("Played", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
             } else if item.source == .youtube, item.duration > 0 {
@@ -99,7 +99,7 @@ struct QueueRow: View {
 
     private var accessibilityLabel: String {
         var components = [item.title, item.subtitle, item.source.displayName]
-        if item.isPlayed {
+        if item.isInPlayedSection {
             components.append("Played")
         }
         if item.status == .unavailable {

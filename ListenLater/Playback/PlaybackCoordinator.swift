@@ -134,6 +134,9 @@ final class PlaybackCoordinator {
         case .podcast, .socialVideo:
             activateAudioSession()
             podcastEngine.play()
+            if item.source.isVideo {
+                queue.recordPlaybackStarted(for: item)
+            }
             transportState = .playing
             updateNowPlaying()
         case .youtube:
@@ -175,7 +178,9 @@ final class PlaybackCoordinator {
         position = item.playbackPosition
         duration = item.duration
         playbackRate = item.playbackRate > 0 ? item.playbackRate : 1
-        item.lastPlayedAt = Date()
+        if item.source == .podcast {
+            item.lastPlayedAt = Date()
+        }
         queue.saveProgress(
             for: item,
             position: position,
@@ -435,6 +440,9 @@ final class PlaybackCoordinator {
         setRemoteCommandsEnabled(true)
         if autoplay {
             podcastEngine.play()
+            if item.source.isVideo {
+                queue.recordPlaybackStarted(for: item)
+            }
             transportState = .playing
         } else {
             transportState = .paused
@@ -540,6 +548,7 @@ final class PlaybackCoordinator {
         case .ready:
             break
         case .playing:
+            queue.recordPlaybackStarted(for: item)
             transportState = .playing
         case .paused:
             if transportState == .playing || transportState == .loading {

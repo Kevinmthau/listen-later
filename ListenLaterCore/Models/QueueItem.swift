@@ -97,4 +97,8 @@ final class QueueItem {
     var hasMeaningfulProgress: Bool {
         playbackPosition >= 3 && !isPlayed
     }
+
+    var isInPlayedSection: Bool {
+        isPlayed || (source.isVideo && lastPlayedAt != nil)
+    }
 }

@@ -250,6 +250,22 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertEqual(harness.store.items.map(\.sortRank), originalRanks)
     }
 
+    func testMoveUpNextPreservesItemsInPlayedSectionAsOrderingAnchors() throws {
+        let harness = try makeHarness()
+        let first = appendItem(to: harness.store, ordinal: 1)
+        let played = appendItem(to: harness.store, ordinal: 2)
+        let third = appendItem(to: harness.store, ordinal: 3)
+        let fourth = appendItem(to: harness.store, ordinal: 4)
+        harness.store.markPlayed(played)
+
+        harness.store.moveUpNext(from: IndexSet(integer: 2), to: 0)
+
+        XCTAssertEqual(
+            harness.store.items.map(\.id),
+            [fourth.id, played.id, first.id, third.id]
+        )
+    }
+
     func testMarkPlayedMarkUnplayedAndDelete() throws {
         let harness = try makeHarness()
         let first = appendItem(to: harness.store, ordinal: 1, duration: 300)
@@ -258,10 +274,14 @@ final class QueueStoreTests: XCTestCase {
 
         harness.store.markPlayed(first)
         XCTAssertTrue(first.isPlayed)
+        XCTAssertTrue(first.isInPlayedSection)
+        XCTAssertNotNil(first.lastPlayedAt)
         XCTAssertEqual(first.playbackPosition, 300)
 
         harness.store.markUnplayed(first)
         XCTAssertFalse(first.isPlayed)
+        XCTAssertFalse(first.isInPlayedSection)
+        XCTAssertNil(first.lastPlayedAt)
         XCTAssertEqual(first.playbackPosition, 0)
 
         harness.store.delete(second)
@@ -365,6 +385,20 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertEqual(harness.store.firstUnplayed()?.id, ready.id)
         XCTAssertEqual(harness.store.nextUnplayed(after: ready)?.id, after.id)
         XCTAssertNil(harness.store.nextUnplayed(after: after))
+    }
+
+    func testFirstAndNextUnplayedSkipVideosThatStartedPlayback() throws {
+        let harness = try makeHarness()
+        let current = appendItem(to: harness.store, ordinal: 1)
+        let startedVideo = appendYouTubeItem(to: harness.store)
+        let after = appendItem(to: harness.store, ordinal: 3)
+
+        harness.store.recordPlaybackStarted(for: startedVideo)
+
+        XCTAssertEqual(harness.store.firstUnplayed()?.id, current.id)
+        XCTAssertEqual(harness.store.nextUnplayed(after: current)?.id, after.id)
+        harness.store.markPlayed(current)
+        XCTAssertEqual(harness.store.firstUnplayed()?.id, after.id)
     }
 
     func testYouTubeMetadataAtOrOverThirtyDaysIsPurgedAfterTransientRefreshFailure() async throws {
