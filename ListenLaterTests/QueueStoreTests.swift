@@ -5,6 +5,35 @@ import XCTest
 
 @MainActor
 final class QueueStoreTests: XCTestCase {
+    func testVideoShareURLUsesDurableCanonicalPage() {
+        let originalURL = URL(
+            string: "https://x.com/OpenAI/status/1234567890123456789?s=20"
+        )!
+        let canonicalURL = URL(
+            string: "https://x.com/OpenAI/status/1234567890123456789"
+        )!
+        let item = QueueItem(
+            originalURL: originalURL,
+            canonicalURL: canonicalURL,
+            source: .socialVideo,
+            sortRank: 1_000
+        )
+        item.playbackURLString = "https://cdn.example.com/temporary-video.mp4"
+
+        XCTAssertEqual(item.videoShareURL, canonicalURL)
+        XCTAssertNotEqual(item.videoShareURL, item.playbackURL)
+    }
+
+    func testPodcastDoesNotExposeVideoShareURL() {
+        let item = QueueItem(
+            originalURL: URL(string: "https://example.com/episode")!,
+            source: .podcast,
+            sortRank: 1_000
+        )
+
+        XCTAssertNil(item.videoShareURL)
+    }
+
     func testAddResolvesWithStubProviderAndAppendsAtBottom() async throws {
         let firstURL = URL(string: "https://podcasts.example/episodes/first")!
         let secondURL = URL(string: "https://podcasts.example/episodes/second")!

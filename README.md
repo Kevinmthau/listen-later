@@ -50,6 +50,9 @@ Key implementation boundaries:
   self-hosted `video-grabber` `/resolve` API. The original post URL is durable;
   the returned signed MP4 URL is treated as short-lived and refreshed before
   later playback.
+- Videos can be shared from Now Playing or a queue item’s long-press menu. The
+  outgoing share contains the canonical source page, never a short-lived media
+  URL.
 - YouTube URL parsing yields a video ID. Public title, channel, artwork,
   duration, embedding status, and made-for-kids status come only from the
   official YouTube Data API `videos.list` endpoint.

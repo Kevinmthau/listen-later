@@ -71,6 +71,13 @@ final class QueueItem {
         artworkURLString.flatMap(URL.init(string:))
     }
 
+    /// The durable public page to send when sharing a video. Social-video
+    /// playback URLs are intentionally excluded because they can expire.
+    var videoShareURL: URL? {
+        guard source.isVideo else { return nil }
+        return canonicalURL ?? originalURL
+    }
+
     func playbackURLNeedsRefresh(
         at date: Date = Date(),
         safetyWindow: TimeInterval = 30

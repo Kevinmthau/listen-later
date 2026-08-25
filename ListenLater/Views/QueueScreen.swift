@@ -244,6 +244,21 @@ struct QueueScreen: View {
                 }
             }
 
+            if let shareURL = item.videoShareURL {
+                ShareLink(
+                    item: shareURL,
+                    subject: Text(item.title)
+                ) {
+                    Label("Share Video", systemImage: "square.and.arrow.up")
+                }
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        model.playback.youtubePlayerWillBeCovered()
+                    }
+                )
+                .accessibilityIdentifier("share-video-\(item.id.uuidString)")
+            }
+
             Button(role: .destructive) {
                 model.queue.delete(item)
                 model.playback.currentItemWasDeleted()

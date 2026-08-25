@@ -20,6 +20,23 @@ struct NowPlayingCard: View {
                     Label(item.source.displayName, systemImage: item.source.symbolName)
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
+
+                    if let shareURL = item.videoShareURL {
+                        ShareLink(
+                            item: shareURL,
+                            subject: Text(item.title)
+                        ) {
+                            Image(systemName: "square.and.arrow.up")
+                                .frame(width: 32, height: 32)
+                        }
+                        .simultaneousGesture(
+                            TapGesture().onEnded {
+                                playback.youtubePlayerWillBeCovered()
+                            }
+                        )
+                        .accessibilityLabel("Share video")
+                        .accessibilityIdentifier("share-current-video-button")
+                    }
                 }
             }
 
