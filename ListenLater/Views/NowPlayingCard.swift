@@ -3,42 +3,17 @@ import SwiftUI
 struct NowPlayingCard: View {
     let playback: PlaybackCoordinator
     let queue: QueueStore
+    let isCompact: Bool
+    let onExpand: () -> Void
+    let onMinimize: () -> Void
 
     @Environment(\.openURL) private var openURL
     @State private var scrubPosition: TimeInterval = 0
     @State private var isScrubbing = false
 
     var body: some View {
-        VStack(spacing: 13) {
-            HStack {
-                Text("NOW PLAYING")
-                    .font(.caption2.weight(.bold))
-                    .tracking(1.2)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if let item = playback.currentItem {
-                    Label(item.source.displayName, systemImage: item.source.symbolName)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-
-                    if let shareURL = item.videoShareURL {
-                        ShareLink(
-                            item: shareURL,
-                            subject: Text(item.title)
-                        ) {
-                            Image(systemName: "square.and.arrow.up")
-                                .frame(width: 32, height: 32)
-                        }
-                        .simultaneousGesture(
-                            TapGesture().onEnded {
-                                playback.youtubePlayerWillBeCovered()
-                            }
-                        )
-                        .accessibilityLabel("Share video")
-                        .accessibilityIdentifier("share-current-video-button")
-                    }
-                }
-            }
+        VStack(spacing: isCompact ? 9 : 13) {
+            nowPlayingHeader
 
             if let item = playback.currentItem {
                 currentContent(item)
@@ -46,7 +21,7 @@ struct NowPlayingCard: View {
                 idleContent
             }
         }
-        .padding(16)
+        .padding(isCompact ? 12 : 16)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(Color(uiColor: .secondarySystemGroupedBackground))
@@ -65,6 +40,86 @@ struct NowPlayingCard: View {
         }
     }
 
+    private var nowPlayingHeader: some View {
+        HStack(spacing: 8) {
+            if isCompact, let item = playback.currentItem {
+                Text(item.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .layoutPriority(1)
+            } else {
+                Text("NOW PLAYING")
+                    .font(.caption2.weight(.bold))
+                    .tracking(1.2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 4)
+
+            if let item = playback.currentItem {
+                if !isCompact {
+                    Label(item.source.displayName, systemImage: item.source.symbolName)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                if isCompact,
+                   item.source.isVideo,
+                   playback.transportState != .requiresYouTubeApp {
+                    Button {
+                        playback.playOrPause()
+                    } label: {
+                        Image(
+                            systemName: playback.transportState.isPlaying
+                                ? "pause.fill"
+                                : "play.fill"
+                        )
+                        .frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel(
+                        playback.transportState.isPlaying ? "Pause" : "Play"
+                    )
+                    .accessibilityIdentifier("play-pause-button")
+                }
+
+                if let shareURL = item.videoShareURL {
+                    ShareLink(
+                        item: shareURL,
+                        subject: Text(item.title)
+                    ) {
+                        Image(systemName: "square.and.arrow.up")
+                            .frame(width: 44, height: 44)
+                    }
+                    .simultaneousGesture(
+                        TapGesture().onEnded {
+                            playback.youtubePlayerWillBeCovered()
+                        }
+                    )
+                    .accessibilityLabel("Share video")
+                    .accessibilityIdentifier("share-current-video-button")
+                }
+
+                if isCompact {
+                    Button(action: onExpand) {
+                        Image(systemName: "chevron.down")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("Expand player")
+                    .accessibilityIdentifier("expand-player-button")
+                } else if item.source.isVideo {
+                    Button(action: onMinimize) {
+                        Image(systemName: "chevron.up")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("Minimize player")
+                    .accessibilityIdentifier("minimize-player-button")
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private func currentContent(_ item: QueueItem) -> some View {
         switch item.source {
@@ -76,49 +131,61 @@ struct NowPlayingCard: View {
             youtubeSurface(item)
         }
 
-        VStack(spacing: 3) {
-            Text(item.title)
-                .font(.headline)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-            if !item.subtitle.isEmpty {
-                Text(item.subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-
-        if playback.transportState == .requiresYouTubeApp {
-            Button {
-                if let url = item.originalURL {
-                    openURL(url)
+        if !isCompact {
+            VStack(spacing: 3) {
+                Text(item.title)
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                if !item.subtitle.isEmpty {
+                    Text(item.subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-            } label: {
-                Label("Open in YouTube", systemImage: "arrow.up.right.square")
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-        } else {
-            progressControls(for: item)
-            transportControls
-        }
 
-        if let notice = playback.notice {
-            Label(notice, systemImage: "info.circle")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            if playback.transportState == .requiresYouTubeApp {
+                openInYouTubeButton(for: item)
+            } else {
+                progressControls(for: item)
+                transportControls
+            }
+
+            if let notice = playback.notice {
+                Label(notice, systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        } else if playback.transportState == .requiresYouTubeApp {
+            openInYouTubeButton(for: item)
         }
+    }
+
+    private func openInYouTubeButton(for item: QueueItem) -> some View {
+        Button {
+            if let url = item.originalURL {
+                openURL(url)
+            }
+        } label: {
+            Label("Open in YouTube", systemImage: "arrow.up.right.square")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
     }
 
     private var socialVideoSurface: some View {
         NativeVideoPlayerView(player: playback.nativeVideoPlayer)
             .frame(minWidth: 200)
-            .frame(height: 225)
+            .frame(height: isCompact ? 112 : 225)
             .background(.black)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .accessibilityHint("Use the playback controls below to watch")
+            .accessibilityHint(
+                isCompact
+                    ? "Use the play control above or expand the player"
+                    : "Use the playback controls below to watch"
+            )
     }
 
     private func youtubeSurface(_ item: QueueItem) -> some View {
@@ -129,7 +196,7 @@ struct NowPlayingCard: View {
             } else {
                 YouTubePlayerView(model: playback.youtubePlayer)
                     .frame(minWidth: 200)
-                    .frame(height: 225)
+                    .frame(height: isCompact ? 200 : 225)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityHint("Official YouTube embedded player")
             }

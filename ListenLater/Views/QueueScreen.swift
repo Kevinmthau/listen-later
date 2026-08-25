@@ -10,14 +10,19 @@ struct QueueScreen: View {
 
     let model: AppModel
 
+    @State private var editMode: EditMode = .inactive
     @State private var presentedSheet: SheetDestination?
+    @State private var isPlayerCompact = false
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 NowPlayingCard(
                     playback: model.playback,
-                    queue: model.queue
+                    queue: model.queue,
+                    isCompact: isPlayerCompact,
+                    onExpand: expandPlayer,
+                    onMinimize: minimizePlayer
                 )
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -49,6 +54,7 @@ struct QueueScreen: View {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if upNextItems.count > 1 {
                         EditButton()
+                            .environment(\.editMode, $editMode)
                     }
                     Button {
                         presentedSheet = .addURL
@@ -100,6 +106,11 @@ struct QueueScreen: View {
                     model.playback.youtubePlayerWillBeCovered()
                 }
             }
+            .onChange(of: model.playback.currentItemID) { _, _ in
+                withAnimation(.snappy(duration: 0.25)) {
+                    isPlayerCompact = false
+                }
+            }
         }
         .tint(Color(red: 0.12, green: 0.25, blue: 0.33))
     }
@@ -145,7 +156,40 @@ struct QueueScreen: View {
                 }
             }
             .listStyle(.plain)
+            .environment(\.editMode, $editMode)
             .environment(\.defaultMinListRowHeight, 74)
+            .simultaneousGesture(
+                playerMinimizingGesture,
+                isEnabled: !editMode.isEditing
+            )
+        }
+    }
+
+    private var playerMinimizingGesture: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onEnded { value in
+                let verticalDistance = value.translation.height
+                guard
+                    !isPlayerCompact,
+                    !editMode.isEditing,
+                    model.playback.currentItem?.source.isVideo == true,
+                    verticalDistance < -24,
+                    abs(verticalDistance) > abs(value.translation.width)
+                else { return }
+
+                minimizePlayer()
+            }
+    }
+
+    private func expandPlayer() {
+        withAnimation(.snappy(duration: 0.25)) {
+            isPlayerCompact = false
+        }
+    }
+
+    private func minimizePlayer() {
+        withAnimation(.snappy(duration: 0.25)) {
+            isPlayerCompact = true
         }
     }
 
