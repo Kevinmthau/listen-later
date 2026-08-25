@@ -1,4 +1,6 @@
+import AVFoundation
 import SwiftUI
+import UIKit
 
 struct QueueRow: View {
     let item: QueueItem
@@ -6,11 +8,7 @@ struct QueueRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ArtworkView(
-                url: item.artworkURL,
-                source: item.source,
-                size: item.source.isVideo ? 94 : 54
-            )
+            queueThumbnail
             .overlay(alignment: .bottomTrailing) {
                 if isCurrent, item.source == .podcast {
                     Image(systemName: "waveform")
@@ -54,6 +52,23 @@ struct QueueRow: View {
         .opacity(item.isPlayed ? 0.72 : 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    @ViewBuilder
+    private var queueThumbnail: some View {
+        if item.source == .socialVideo {
+            VideoThumbnailView(
+                videoURL: item.playbackURL,
+                cacheKey: item.canonicalURL ?? item.originalURL,
+                size: 94
+            )
+        } else {
+            ArtworkView(
+                url: item.artworkURL,
+                source: item.source,
+                size: item.source.isVideo ? 94 : 54
+            )
+        }
     }
 
     @ViewBuilder
@@ -108,7 +123,11 @@ struct ArtworkView: View {
                     .aspectRatio(contentMode: source.isVideo ? .fit : .fill)
             case .empty:
                 placeholder
-                    .overlay { ProgressView().controlSize(.small) }
+                    .overlay {
+                        if url != nil {
+                            ProgressView().controlSize(.small)
+                        }
+                    }
             case .failure:
                 placeholder
             @unknown default:
@@ -161,6 +180,96 @@ struct ArtworkView: View {
             [.black, Color(red: 0.08, green: 0.42, blue: 0.68)]
         case .youtube:
             [Color(red: 0.45, green: 0.12, blue: 0.12), .red.opacity(0.75)]
+        }
+    }
+}
+
+private struct VideoThumbnailView: View {
+    let videoURL: URL?
+    let cacheKey: URL?
+    let size: CGFloat
+
+    @State private var image: UIImage?
+    @State private var isLoading = false
+
+    var body: some View {
+        ZStack {
+            ArtworkView(url: nil, source: .socialVideo, size: size)
+
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .transition(.opacity)
+            } else if isLoading {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(.white)
+            }
+        }
+        .frame(width: size * 1.35, height: size * 0.76)
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .task(id: videoURL) {
+            await loadThumbnail()
+        }
+    }
+
+    @MainActor
+    private func loadThumbnail() async {
+        image = nil
+        guard let videoURL else {
+            isLoading = false
+            return
+        }
+
+        isLoading = true
+        let thumbnail = await VideoThumbnailCache.shared.thumbnail(
+            for: videoURL,
+            cacheKey: cacheKey ?? videoURL,
+            maximumSize: CGSize(width: size * 3, height: size * 3)
+        )
+        guard !Task.isCancelled else { return }
+        image = thumbnail
+        isLoading = false
+    }
+}
+
+@MainActor
+private final class VideoThumbnailCache {
+    static let shared = VideoThumbnailCache()
+
+    private let images = NSCache<NSURL, UIImage>()
+
+    private init() {
+        images.countLimit = 100
+    }
+
+    func thumbnail(
+        for videoURL: URL,
+        cacheKey: URL,
+        maximumSize: CGSize
+    ) async -> UIImage? {
+        if let cached = images.object(forKey: cacheKey as NSURL) {
+            return cached
+        }
+
+        let asset = AVURLAsset(
+            url: videoURL,
+            options: [AVURLAssetPreferPreciseDurationAndTimingKey: false]
+        )
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = maximumSize
+
+        do {
+            let result = try await generator.image(
+                at: CMTime(seconds: 0.1, preferredTimescale: 600)
+            )
+            let thumbnail = UIImage(cgImage: result.image)
+            images.setObject(thumbnail, forKey: cacheKey as NSURL)
+            return thumbnail
+        } catch {
+            return nil
         }
     }
 }
