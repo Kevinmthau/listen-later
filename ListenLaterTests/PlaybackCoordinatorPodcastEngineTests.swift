@@ -69,7 +69,7 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
             harness.engine.loads.last?.url,
             URL(string: "https://cdn.example.com/social/1.mp4")
         )
-        XCTAssertTrue(item.isInPlayedSection)
+        XCTAssertFalse(item.isInPlayedSection)
         XCTAssertNotNil(item.lastPlayedAt)
         XCTAssertFalse(item.isPlayed)
 
@@ -91,7 +91,7 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         let third = appendPodcast(to: harness.queue, ordinal: 3, duration: 600)
 
         harness.coordinator.start(video)
-        harness.queue.moveUpNext(from: IndexSet(integer: 1), to: 0)
+        harness.queue.moveUpNext(from: IndexSet(integer: 2), to: 1)
         harness.engine.emit(.ended)
 
         XCTAssertEqual(harness.coordinator.currentItemID, third.id)
@@ -270,20 +270,99 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(harness.engine.loads.last?.url, second.playbackURL)
     }
 
-    func testNearEndProgressDoesNotAdvanceBeforeActivePlayerEnds() throws {
+    func testActivePartialPlaybackOverridesSyncedPlayedState() throws {
         let harness = try makeHarness()
         let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
-        _ = appendPodcast(to: harness.queue, ordinal: 2, duration: 600)
+        let second = appendPodcast(to: harness.queue, ordinal: 2, duration: 600)
+        harness.coordinator.start(first)
+        first.progressUpdatedAt = .distantPast
+        harness.engine.emit(.timeChanged(position: 120, duration: 300))
+
+        harness.queue.markPlayed(first)
+        harness.coordinator.reconcileQueueState()
+
+        XCTAssertFalse(first.isPlayed)
+        XCTAssertFalse(first.isInPlayedSection)
+        XCTAssertEqual(first.playbackPosition, 120)
+        XCTAssertEqual(harness.coordinator.currentItemID, first.id)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+        XCTAssertNotEqual(harness.coordinator.currentItemID, second.id)
+    }
+
+    func testNearEndProgressDoesNotMarkPlayedOrAdvanceBeforeActivePlayerEnds() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let second = appendPodcast(to: harness.queue, ordinal: 2, duration: 600)
+        let originalOrder = harness.queue.items.map(\.id)
         harness.coordinator.start(first)
         first.progressUpdatedAt = .distantPast
         harness.engine.emit(.timeChanged(position: 299, duration: 300))
-        XCTAssertTrue(first.isPlayed)
+        XCTAssertFalse(first.isPlayed)
+        XCTAssertFalse(first.isInPlayedSection)
+        XCTAssertEqual(
+            harness.queue.items.filter { !$0.isInPlayedSection }.map(\.id),
+            originalOrder
+        )
 
         harness.coordinator.reconcileQueueState()
 
         XCTAssertEqual(harness.coordinator.currentItemID, first.id)
         XCTAssertEqual(harness.coordinator.transportState, .playing)
         XCTAssertTrue(harness.engine.isPlaying)
+
+        harness.engine.emit(.ended)
+
+        XCTAssertTrue(first.isPlayed)
+        XCTAssertTrue(first.isInPlayedSection)
+        XCTAssertEqual(harness.coordinator.currentItemID, second.id)
+    }
+
+    func testPlayNextKeepsPartialItemUnplayedAndInItsQueuePosition() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let second = appendPodcast(to: harness.queue, ordinal: 2, duration: 600)
+        let originalOrder = harness.queue.items.map(\.id)
+        harness.coordinator.start(first)
+        first.progressUpdatedAt = .distantPast
+        harness.engine.emit(.timeChanged(position: 120, duration: 300))
+
+        harness.coordinator.playNext()
+
+        XCTAssertFalse(first.isPlayed)
+        XCTAssertFalse(first.isInPlayedSection)
+        XCTAssertEqual(first.playbackPosition, 120)
+        XCTAssertEqual(harness.queue.items.map(\.id), originalOrder)
+        XCTAssertEqual(
+            harness.queue.items.filter { !$0.isInPlayedSection }.map(\.id),
+            originalOrder
+        )
+        XCTAssertEqual(harness.coordinator.currentItemID, second.id)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+
+        harness.engine.emit(.ended)
+
+        XCTAssertTrue(second.isPlayed)
+        XCTAssertEqual(harness.coordinator.currentItemID, first.id)
+        XCTAssertEqual(harness.coordinator.position, 120)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+    }
+
+    func testPlayNextOnOnlyItemStopsWithoutMarkingItPlayed() throws {
+        let harness = try makeHarness()
+        let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        harness.coordinator.start(item)
+        item.progressUpdatedAt = .distantPast
+        harness.engine.emit(.timeChanged(position: 120, duration: 300))
+
+        harness.coordinator.playNext()
+
+        XCTAssertFalse(item.isPlayed)
+        XCTAssertFalse(item.isInPlayedSection)
+        XCTAssertEqual(item.playbackPosition, 120)
+        XCTAssertNil(harness.coordinator.currentItemID)
+        XCTAssertEqual(harness.coordinator.transportState, .idle)
+        XCTAssertEqual(harness.coordinator.notice, "This item remains in Up Next.")
+        XCTAssertEqual(harness.queue.firstUnplayed()?.id, item.id)
     }
 
     func testQueueRefreshDeletionStopsCurrentPlayback() throws {

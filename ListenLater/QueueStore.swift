@@ -363,14 +363,9 @@ final class QueueStore {
         if let rate {
             item.playbackRate = rate
         }
-        if item.source != .youtube {
-            let completionThreshold = item.duration > 10
-                ? item.duration - 2
-                : item.duration * 0.95
-            item.isPlayed = item.duration > 0
-                && item.playbackPosition > 0
-                && item.playbackPosition >= completionThreshold
-        }
+        // Only a terminal player event or an explicit user action establishes
+        // completion. A saved position, even at the known duration, is still
+        // resumable progress until the player confirms that playback ended.
         item.progressUpdatedAt = now
         item.updatedAt = now
         do {

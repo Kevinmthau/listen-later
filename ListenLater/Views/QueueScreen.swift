@@ -325,7 +325,7 @@ struct QueueScreen: View {
         if item.isInPlayedSection {
             model.queue.markUnplayed(item)
         } else if model.playback.currentItemID == item.id {
-            model.playback.playNext()
+            model.playback.markCurrentPlayed()
         } else {
             model.queue.markPlayed(item)
         }

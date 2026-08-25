@@ -106,6 +106,6 @@ final class QueueItem {
     }
 
     var isInPlayedSection: Bool {
-        isPlayed || (source.isVideo && lastPlayedAt != nil)
+        isPlayed
     }
 }

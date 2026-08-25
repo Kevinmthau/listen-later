@@ -301,12 +301,18 @@ final class PlaybackCoordinator {
             }
             return
         }
-        queue.markPlayed(item)
-        guard let next = queue.nextUnplayed(after: item) else {
-            finishQueue()
+        guard let next = nextUnplayedItem(after: item) else {
+            saveCurrentProgress(force: true)
+            finishQueue(notice: "This item remains in Up Next.")
             return
         }
         start(next)
+    }
+
+    func markCurrentPlayed() {
+        guard let item = currentItem else { return }
+        queue.markPlayed(item)
+        advance(from: item)
     }
 
     func sceneDidBecomeActive() {
@@ -383,6 +389,7 @@ final class PlaybackCoordinator {
         // seeking playback backward, and prevents near-end progress from
         // stopping the player before its terminal event advances the queue.
         if transportState == .playing {
+            item.isPlayed = false
             queue.saveProgress(
                 for: item,
                 position: position,
@@ -618,7 +625,7 @@ final class PlaybackCoordinator {
     }
 
     private func advance(from item: QueueItem) {
-        guard let next = queue.nextUnplayed(after: item) else {
+        guard let next = nextUnplayedItem(after: item) else {
             finishQueue()
             return
         }
@@ -630,14 +637,24 @@ final class PlaybackCoordinator {
             finishQueue()
             return
         }
-        guard let next = queue.nextUnplayed(after: item) else {
+        guard let next = nextUnplayedItem(after: item) else {
             finishQueue()
             return
         }
         start(next)
     }
 
-    private func finishQueue() {
+    private func nextUnplayedItem(after item: QueueItem) -> QueueItem? {
+        if let next = queue.nextUnplayed(after: item) {
+            return next
+        }
+        guard let first = queue.firstUnplayed(), first.id != item.id else {
+            return nil
+        }
+        return first
+    }
+
+    private func finishQueue(notice finalNotice: String = "Queue finished.") {
         podcastEngine.pause()
         youtubePlayer.pause()
         setRemoteCommandsEnabled(false)
@@ -654,7 +671,7 @@ final class PlaybackCoordinator {
         position = 0
         duration = 0
         clearNowPlaying()
-        notice = "Queue finished."
+        notice = finalNotice
     }
 
     private func parkCurrentTransport(
