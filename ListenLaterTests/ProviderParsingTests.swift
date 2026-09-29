@@ -309,6 +309,61 @@ final class VideoGrabberProviderAdapterTests: XCTestCase {
         XCTAssertEqual(bodyObject["url"], sourceURL.absoluteString)
     }
 
+    func testResolveUsesResolverMetadataWhenPresent() async throws {
+        let endpoint = URL(string: "https://resolver.example/resolve")!
+        let responseData = try JSONSerialization.data(withJSONObject: [
+            "video_url": "https://cdn.example.com/video.mp4",
+            "filename": "instagram_DR8LMPxEoiO.mp4",
+            "cached": false,
+            "title": "  A reel about slow technology  ",
+            "uploader": "Good Objects",
+            "uploader_id": "goodobjects",
+            "thumbnail_url": "https://images.example.com/reel.jpg",
+            "duration": 42.5
+        ] as [String: Any])
+        HTTPClientURLProtocol.responses.set([
+            endpoint: .success(data: responseData)
+        ])
+        let adapter = makeVideoGrabberAdapter(endpoint: endpoint, apiToken: "")
+
+        let resolved = try await adapter.resolve(
+            URL(string: "https://www.instagram.com/reel/DR8LMPxEoiO/")!
+        )
+
+        XCTAssertEqual(resolved.title, "A reel about slow technology")
+        XCTAssertEqual(resolved.creatorName, "Good Objects")
+        XCTAssertEqual(
+            resolved.artworkURL,
+            URL(string: "https://images.example.com/reel.jpg")
+        )
+        XCTAssertEqual(resolved.duration, 42.5)
+    }
+
+    func testResolveIgnoresBlankAndInsecureResolverMetadata() async throws {
+        let endpoint = URL(string: "https://resolver.example/resolve")!
+        let responseData = try JSONSerialization.data(withJSONObject: [
+            "video_url": "https://cdn.example.com/video.mp4",
+            "title": "   ",
+            "uploader": NSNull(),
+            "uploader_id": "OpenAI",
+            "thumbnail_url": "http://images.example.com/insecure.jpg",
+            "duration": 0
+        ] as [String: Any])
+        HTTPClientURLProtocol.responses.set([
+            endpoint: .success(data: responseData)
+        ])
+        let adapter = makeVideoGrabberAdapter(endpoint: endpoint, apiToken: "")
+
+        let resolved = try await adapter.resolve(
+            URL(string: "https://x.com/OpenAI/status/1234567890123456789")!
+        )
+
+        XCTAssertEqual(resolved.title, "X video")
+        XCTAssertEqual(resolved.creatorName, "@OpenAI")
+        XCTAssertNil(resolved.artworkURL)
+        XCTAssertNil(resolved.duration)
+    }
+
     func testResolveMapsUnauthorizedResponseToConfigurationError() async {
         let endpoint = URL(string: "https://resolver.example/resolve")!
         HTTPClientURLProtocol.responses.set([

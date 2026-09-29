@@ -108,4 +108,107 @@ final class QueueItem {
     var isInPlayedSection: Bool {
         isPlayed
     }
+
+    /// The name to show for where this came from, e.g. "X" or "Instagram"
+    /// rather than the generic "Social Video".
+    var sourceName: String {
+        guard source == .socialVideo,
+              let originalURL,
+              let platform = SocialVideoURLParser.parse(originalURL)?.platform
+        else {
+            return source.displayName
+        }
+        return platform.displayName
+    }
+
+    func snapshot() -> QueueItemSnapshot {
+        QueueItemSnapshot(
+            id: id,
+            originalURLString: originalURLString,
+            canonicalURLString: canonicalURLString,
+            playbackURLString: playbackURLString,
+            playbackURLExpiresAt: playbackURLExpiresAt,
+            youtubeVideoID: youtubeVideoID,
+            pendingShareReceiptIDString: pendingShareReceiptIDString,
+            title: title,
+            subtitle: subtitle,
+            artworkURLString: artworkURLString,
+            duration: duration,
+            sourceRawValue: sourceRawValue,
+            statusRawValue: statusRawValue,
+            unavailableReason: unavailableReason,
+            metadataFetchedAt: metadataFetchedAt,
+            youtubeEmbeddable: youtubeEmbeddable,
+            youtubeMadeForKids: youtubeMadeForKids,
+            sortRank: sortRank,
+            playbackPosition: playbackPosition,
+            playbackRate: playbackRate,
+            isPlayed: isPlayed,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            progressUpdatedAt: progressUpdatedAt,
+            lastPlayedAt: lastPlayedAt
+        )
+    }
+}
+
+/// Every stored value of a deleted `QueueItem`, so Undo can recreate it.
+struct QueueItemSnapshot: Sendable {
+    let id: UUID
+    let originalURLString: String
+    let canonicalURLString: String
+    let playbackURLString: String?
+    let playbackURLExpiresAt: Date?
+    let youtubeVideoID: String?
+    let pendingShareReceiptIDString: String?
+    let title: String
+    let subtitle: String
+    let artworkURLString: String?
+    let duration: TimeInterval
+    let sourceRawValue: String
+    let statusRawValue: String
+    let unavailableReason: String?
+    let metadataFetchedAt: Date?
+    let youtubeEmbeddable: Bool
+    let youtubeMadeForKids: Bool
+    let sortRank: Double
+    let playbackPosition: TimeInterval
+    let playbackRate: Double
+    let isPlayed: Bool
+    let createdAt: Date
+    let updatedAt: Date
+    let progressUpdatedAt: Date
+    let lastPlayedAt: Date?
+
+    func makeItem() -> QueueItem? {
+        guard let originalURL = URL(string: originalURLString) else { return nil }
+        let item = QueueItem(
+            id: id,
+            originalURL: originalURL,
+            title: title,
+            subtitle: subtitle,
+            source: MediaSource(rawValue: sourceRawValue) ?? .podcast,
+            sortRank: sortRank,
+            createdAt: createdAt
+        )
+        item.canonicalURLString = canonicalURLString
+        item.playbackURLString = playbackURLString
+        item.playbackURLExpiresAt = playbackURLExpiresAt
+        item.youtubeVideoID = youtubeVideoID
+        item.pendingShareReceiptIDString = pendingShareReceiptIDString
+        item.artworkURLString = artworkURLString
+        item.duration = duration
+        item.statusRawValue = statusRawValue
+        item.unavailableReason = unavailableReason
+        item.metadataFetchedAt = metadataFetchedAt
+        item.youtubeEmbeddable = youtubeEmbeddable
+        item.youtubeMadeForKids = youtubeMadeForKids
+        item.playbackPosition = playbackPosition
+        item.playbackRate = playbackRate
+        item.isPlayed = isPlayed
+        item.updatedAt = Date()
+        item.progressUpdatedAt = progressUpdatedAt
+        item.lastPlayedAt = lastPlayedAt
+        return item
+    }
 }
