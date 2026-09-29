@@ -128,7 +128,8 @@ final class QueueStore {
         item.unavailableReason = nil
         item.updatedAt = Date()
         guard saveAndRefresh() else { return }
-        await resolve(item)
+        // Losing the connection mustn't cost a video its place in the queue.
+        await resolve(item, preserveAvailabilityOnTransientFailure: true)
     }
 
     func importPendingShares() async {
@@ -525,6 +526,13 @@ final class QueueStore {
             {
                 liveItem.status = .unavailable
                 liveItem.unavailableReason = error.localizedDescription
+                liveItem.updatedAt = Date()
+                saveAndRefresh()
+            } else if liveItem.status == .resolving {
+                // Only this attempt failed, so a ready item whose link was
+                // being refreshed stays ready, with its old link, and can
+                // be tried again.
+                liveItem.status = .ready
                 liveItem.updatedAt = Date()
                 saveAndRefresh()
             }

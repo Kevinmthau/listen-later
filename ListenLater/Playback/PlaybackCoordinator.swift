@@ -51,9 +51,10 @@ final class PlaybackCoordinator {
     @ObservationIgnored private var activePodcastLoadID: UUID?
     @ObservationIgnored private var activeYouTubeLoadID: UUID?
     @ObservationIgnored private var wasPlayingBeforeInterruption = false
-    /// Set while the end-of-item sleep timer has left the next item paused.
-    /// Until something is played on purpose, items that replace it, for
-    /// example after a failure, are left paused too.
+    /// Set once a sleep timer has paused playback, or left the next item
+    /// paused at the end of one. Until something is played on purpose,
+    /// items that replace the paused one, for example after a failure or
+    /// when another device finishes it, are left paused too.
     @ObservationIgnored private var sleepTimerHoldsPlayback = false
     @ObservationIgnored private var remoteCommandTargets: [(MPRemoteCommand, Any)] = []
     @ObservationIgnored private var notificationObservers: [NSObjectProtocol] = []
@@ -163,7 +164,10 @@ final class PlaybackCoordinator {
         // A social video's signed link expires within minutes, so one paused
         // for longer (e.g. left ready by the sleep timer overnight) goes back
         // through start(), which refreshes the link, rather than resuming.
-        guard preparedItemID == item.id, !item.playbackURLNeedsRefresh() else {
+        // One that is still playing already has its media and carries on.
+        guard preparedItemID == item.id,
+              transportState.isPlaying || !item.playbackURLNeedsRefresh()
+        else {
             start(item)
             return
         }
@@ -407,6 +411,7 @@ final class PlaybackCoordinator {
             return
         }
         pause()
+        sleepTimerHoldsPlayback = true
         notice = Self.sleepTimerNotice
     }
 
@@ -661,6 +666,8 @@ final class PlaybackCoordinator {
         case .ready:
             break
         case .playing:
+            // Includes the user starting the video in the player itself.
+            sleepTimerHoldsPlayback = false
             queue.recordPlaybackStarted(for: item)
             isBuffering = false
             transportState = .playing
@@ -732,35 +739,42 @@ final class PlaybackCoordinator {
         pendingResolutionAutoplayItemID = nil
 
         if item.status == .ready {
+            // A refresh that couldn't reach the resolver, e.g. offline,
+            // leaves the video ready with its old link. Starting it again
+            // would only refresh again, so wait for the user to retry.
+            guard !item.playbackURLNeedsRefresh() else {
+                transportState = .needsUserAction
+                notice = "Couldn’t refresh the video link. Tap Play to try again."
+                return
+            }
             start(item, autoplay: shouldAutoplay)
         } else if item.status == .unavailable {
             advanceAfterFailure()
         }
     }
 
+    /// Moves on from `item` to the next item, or finishes the queue. While
+    /// a sleep timer holds playback, the next item is left paused and shows
+    /// the timer's notice.
     private func advance(from item: QueueItem) {
         guard let next = nextUnplayedItem(after: item) else {
             finishQueue()
             return
         }
-        start(next)
+        start(next, autoplay: !sleepTimerHoldsPlayback)
+        if sleepTimerHoldsPlayback {
+            notice = Self.sleepTimerNotice
+        }
     }
 
     /// Handles a player's terminal event for `item`.
     private func completeItem(_ item: QueueItem) {
         queue.markPlayed(item)
-        guard sleepTimer == .endOfItem else {
-            advance(from: item)
-            return
+        if sleepTimer == .endOfItem {
+            sleepTimer = .off
+            sleepTimerHoldsPlayback = true
         }
-        sleepTimer = .off
-        guard let next = nextUnplayedItem(after: item) else {
-            finishQueue()
-            return
-        }
-        sleepTimerHoldsPlayback = true
-        start(next, autoplay: false)
-        notice = Self.sleepTimerNotice
+        advance(from: item)
     }
 
     private func advanceAfterFailure() {
@@ -768,11 +782,7 @@ final class PlaybackCoordinator {
             finishQueue()
             return
         }
-        guard let next = nextUnplayedItem(after: item) else {
-            finishQueue()
-            return
-        }
-        start(next, autoplay: !sleepTimerHoldsPlayback)
+        advance(from: item)
     }
 
     private func nextUnplayedItem(after item: QueueItem) -> QueueItem? {
