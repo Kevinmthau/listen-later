@@ -10,9 +10,15 @@ struct ListenLaterApp: App {
 
     init() {
         let isDemoMode = ProcessInfo.processInfo.arguments.contains("-DemoQueue")
+        // Unit tests run inside this app; keep them away from the real store
+        // and the user's iCloud data. Tests build their own containers.
+        let isHostingUnitTests =
+            ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
         let persistence: PersistenceController.Result
         do {
-            persistence = try PersistenceController.makeContainer(inMemory: isDemoMode)
+            persistence = try PersistenceController.makeContainer(
+                inMemory: isDemoMode || isHostingUnitTests
+            )
         } catch {
             fatalError("Unable to create the MushRadio store: \(error)")
         }
@@ -21,7 +27,10 @@ struct ListenLaterApp: App {
         _model = State(
             initialValue: AppModel(
                 persistence: persistence,
-                isDemoMode: isDemoMode
+                // The test host also runs like demo mode, which never imports
+                // from the App Group inbox: on a signed build, importing into
+                // the in-memory store would consume real shared links.
+                isDemoMode: isDemoMode || isHostingUnitTests
             )
         )
     }
