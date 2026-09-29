@@ -306,8 +306,7 @@ struct QueueScreen: View {
     }
 
     private func queueRow(_ item: QueueItem) -> some View {
-        // A real button: VoiceOver announces it as one, and the row
-        // highlights while pressed.
+        // A real button, so VoiceOver announces it as one.
         Button {
             select(item)
         } label: {
@@ -428,6 +427,9 @@ struct QueueScreen: View {
     }
 
     private func select(_ item: QueueItem) {
+        // A plain-style row stays tappable while reordering; a tap then
+        // mustn't start or pause playback.
+        guard !editMode.isEditing else { return }
         if item.status == .unavailable {
             // Show why, and let the user choose, rather than silently
             // retrying a link that may never work.
