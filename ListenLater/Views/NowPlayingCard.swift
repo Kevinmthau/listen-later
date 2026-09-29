@@ -88,8 +88,12 @@ struct NowPlayingCard: View {
 
             sleepTimerMenu
 
-            RoutePickerButton(prioritizesVideoDevices: item.source.isVideo)
-                .frame(width: 44, height: 44)
+            // The route sheet would cover the YouTube player while it plays,
+            // which the app avoids everywhere else.
+            if item.source != .youtube {
+                RoutePickerButton(prioritizesVideoDevices: item.source.isVideo)
+                    .frame(width: 44, height: 44)
+            }
 
             if let shareURL = item.videoShareURL {
                 shareButton(for: shareURL, title: item.title)

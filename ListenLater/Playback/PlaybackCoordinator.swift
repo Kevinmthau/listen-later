@@ -51,6 +51,10 @@ final class PlaybackCoordinator {
     @ObservationIgnored private var activePodcastLoadID: UUID?
     @ObservationIgnored private var activeYouTubeLoadID: UUID?
     @ObservationIgnored private var wasPlayingBeforeInterruption = false
+    /// Set while the end-of-item sleep timer has left the next item paused.
+    /// Until something is played on purpose, items that replace it, for
+    /// example after a failure, are left paused too.
+    @ObservationIgnored private var sleepTimerHoldsPlayback = false
     @ObservationIgnored private var remoteCommandTargets: [(MPRemoteCommand, Any)] = []
     @ObservationIgnored private var notificationObservers: [NSObjectProtocol] = []
 
@@ -133,6 +137,9 @@ final class PlaybackCoordinator {
     }
 
     func play() {
+        sleepTimerHoldsPlayback = false
+        // Playing on purpose supersedes an interruption's pending resume.
+        wasPlayingBeforeInterruption = false
         guard let item = currentItem else {
             guard let first = queue.firstUnplayed() else {
                 notice = "Your queue is caught up."
@@ -153,13 +160,19 @@ final class PlaybackCoordinator {
             return
         }
 
-        guard preparedItemID == item.id else {
+        // A social video's signed link expires within minutes, so one paused
+        // for longer (e.g. left ready by the sleep timer overnight) goes back
+        // through start(), which refreshes the link, rather than resuming.
+        guard preparedItemID == item.id, !item.playbackURLNeedsRefresh() else {
             start(item)
             return
         }
 
         switch item.source {
         case .podcast, .socialVideo:
+            // A notice about why playback paused is stale once it resumes;
+            // clear it first, so a problem activating audio still shows.
+            notice = nil
             activateAudioSession()
             podcastEngine.play()
             isBuffering = !podcastEngine.isPlaying
@@ -167,8 +180,6 @@ final class PlaybackCoordinator {
                 queue.recordPlaybackStarted(for: item)
             }
             transportState = .playing
-            // A notice about why playback paused is stale once it resumes.
-            notice = nil
             updateNowPlaying()
         case .youtube:
             guard isForeground else {
@@ -186,6 +197,9 @@ final class PlaybackCoordinator {
     }
 
     func start(_ item: QueueItem, autoplay: Bool = true) {
+        if autoplay {
+            sleepTimerHoldsPlayback = false
+        }
         saveCurrentProgress(force: true)
         let currentUsesNativePlayback =
             currentItem.map { $0.source != .youtube } ?? false
@@ -199,7 +213,7 @@ final class PlaybackCoordinator {
         parkCurrentTransport(
             deactivateAudioSession: shouldDeactivatePodcastSession
         )
-        notice = nil
+        notice = sleepTimerHoldsPlayback ? Self.sleepTimerNotice : nil
         isBuffering = false
         currentItemID = item.id
         preparedItemID = nil
@@ -393,8 +407,10 @@ final class PlaybackCoordinator {
             return
         }
         pause()
-        notice = "Paused by the sleep timer."
+        notice = Self.sleepTimerNotice
     }
+
+    private static let sleepTimerNotice = "Paused by the sleep timer."
 
     func sceneDidBecomeActive() {
         isForeground = true
@@ -742,8 +758,9 @@ final class PlaybackCoordinator {
             finishQueue()
             return
         }
+        sleepTimerHoldsPlayback = true
         start(next, autoplay: false)
-        notice = "Paused by the sleep timer."
+        notice = Self.sleepTimerNotice
     }
 
     private func advanceAfterFailure() {
@@ -755,7 +772,7 @@ final class PlaybackCoordinator {
             finishQueue()
             return
         }
-        start(next)
+        start(next, autoplay: !sleepTimerHoldsPlayback)
     }
 
     private func nextUnplayedItem(after item: QueueItem) -> QueueItem? {
@@ -779,6 +796,7 @@ final class PlaybackCoordinator {
         currentItemID = nil
         preparedItemID = nil
         pendingResolutionAutoplayItemID = nil
+        sleepTimerHoldsPlayback = false
         activePodcastLoadID = nil
         activeYouTubeLoadID = nil
         transportState = .idle

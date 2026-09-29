@@ -575,6 +575,46 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(harness.coordinator.notice, "Paused by the sleep timer.")
     }
 
+    func testSleepTimerHoldSurvivesAFailureOfTheNextItem() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let second = appendPodcast(to: harness.queue, ordinal: 2, duration: 300)
+        let third = appendPodcast(to: harness.queue, ordinal: 3, duration: 300)
+        harness.coordinator.start(first)
+        harness.coordinator.setSleepTimerAtEndOfItem()
+        harness.engine.emit(.ended)
+        XCTAssertEqual(harness.coordinator.currentItemID, second.id)
+
+        harness.engine.emit(.failed("The episode is gone."))
+
+        XCTAssertEqual(harness.coordinator.currentItemID, third.id)
+        XCTAssertEqual(
+            harness.coordinator.transportState,
+            .paused,
+            "A failure after the timer fired must not start playback."
+        )
+        XCTAssertEqual(harness.engine.playCallCount, 1)
+        XCTAssertEqual(harness.coordinator.notice, "Paused by the sleep timer.")
+
+        harness.coordinator.play()
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+    }
+
+    func testResumingAVideoWithAnExpiredLinkRefreshesItFirst() throws {
+        let harness = try makeHarness()
+        let video = appendSocialVideo(to: harness.queue, ordinal: 1)
+        harness.coordinator.start(video)
+        harness.coordinator.pause()
+        let plays = harness.engine.playCallCount
+        video.playbackURLExpiresAt = .distantPast
+
+        harness.coordinator.play()
+
+        XCTAssertEqual(harness.engine.playCallCount, plays)
+        XCTAssertEqual(harness.coordinator.transportState, .loading)
+        XCTAssertEqual(harness.coordinator.notice, "Refreshing the video link…")
+    }
+
     func testSleepTimerAtEndOfLastItemFinishesTheQueue() throws {
         let harness = try makeHarness()
         let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
