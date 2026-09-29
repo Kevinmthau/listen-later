@@ -5,6 +5,7 @@ import WebKit
 enum YouTubePlayerEvent: Equatable {
     case ready
     case playing
+    case buffering
     case paused
     case ended
     case progress(position: TimeInterval, duration: TimeInterval)
@@ -123,6 +124,8 @@ final class YouTubePlayerModel {
             isPlaying = true
             requiresUserAction = false
             setPlaybackRate(desiredPlaybackRate)
+        case .buffering:
+            break
         case .paused:
             isPlaying = false
         case .ended:

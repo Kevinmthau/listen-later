@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct NowPlayingCard: View {
+    static let playbackRates: [Double] = [0.75, 1, 1.25, 1.5, 1.75, 2]
+    static let sleepTimerMinutes = [5, 15, 30, 45, 60]
+
     let playback: PlaybackCoordinator
     let queue: QueueStore
     let isCompact: Bool
@@ -13,10 +16,12 @@ struct NowPlayingCard: View {
 
     var body: some View {
         VStack(spacing: isCompact ? 9 : 13) {
-            nowPlayingHeader
-
             if let item = playback.currentItem {
-                currentContent(item)
+                if isCompact {
+                    compactContent(item)
+                } else {
+                    expandedContent(item)
+                }
             } else {
                 idleContent
             }
@@ -40,127 +45,417 @@ struct NowPlayingCard: View {
         }
     }
 
-    private var nowPlayingHeader: some View {
-        HStack(spacing: 8) {
-            if isCompact, let item = playback.currentItem {
-                Text(item.title)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .layoutPriority(1)
-            } else {
-                Text("NOW PLAYING")
-                    .font(.caption2.weight(.bold))
-                    .tracking(1.2)
-                    .foregroundStyle(.secondary)
+    // MARK: - Expanded
+
+    @ViewBuilder
+    private func expandedContent(_ item: QueueItem) -> some View {
+        expandedHeader(item)
+
+        switch item.source {
+        case .podcast:
+            HStack(spacing: 14) {
+                ArtworkView(url: item.artworkURL, source: item.source, size: 64)
+                titleBlock(item)
             }
+        case .socialVideo:
+            socialVideoSurface
+            titleBlock(item)
+        case .youtube:
+            youtubeSurface(item)
+            titleBlock(item)
+        }
+
+        if playback.transportState == .requiresYouTubeApp {
+            openInYouTubeButton(for: item)
+        } else {
+            progressControls(for: item)
+            transportControls
+        }
+
+        noticeLabel
+    }
+
+    private func expandedHeader(_ item: QueueItem) -> some View {
+        HStack(spacing: 0) {
+            Text("NOW PLAYING")
+                .font(.caption2.weight(.bold))
+                .tracking(1.2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
 
             Spacer(minLength: 4)
 
-            if let item = playback.currentItem {
-                if !isCompact {
-                    Label(item.source.displayName, systemImage: item.source.symbolName)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
+            sleepTimerMenu
 
-                if isCompact,
-                   item.source.isVideo,
-                   playback.transportState != .requiresYouTubeApp {
-                    Button {
-                        playback.playOrPause()
-                    } label: {
-                        Image(
-                            systemName: playback.transportState.isPlaying
-                                ? "pause.fill"
-                                : "play.fill"
-                        )
-                        .frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel(
-                        playback.transportState.isPlaying ? "Pause" : "Play"
-                    )
-                    .accessibilityIdentifier("play-pause-button")
-                }
+            RoutePickerButton(prioritizesVideoDevices: item.source.isVideo)
+                .frame(width: 44, height: 44)
 
-                if let shareURL = item.videoShareURL {
-                    ShareLink(
-                        item: shareURL,
-                        subject: Text(item.title)
-                    ) {
-                        Image(systemName: "square.and.arrow.up")
-                            .frame(width: 44, height: 44)
-                    }
-                    .simultaneousGesture(
-                        TapGesture().onEnded {
-                            playback.youtubePlayerWillBeCovered()
-                        }
-                    )
-                    .accessibilityLabel("Share video")
-                    .accessibilityIdentifier("share-current-video-button")
-                }
+            if let shareURL = item.videoShareURL {
+                shareButton(for: shareURL, title: item.title)
+            }
 
-                if isCompact {
-                    Button(action: onExpand) {
-                        Image(systemName: "chevron.down")
-                            .font(.subheadline.weight(.semibold))
-                            .frame(width: 44, height: 44)
+            Button(action: onMinimize) {
+                Image(systemName: "chevron.up")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Minimize player")
+            .accessibilityIdentifier("minimize-player-button")
+        }
+    }
+
+    private func titleBlock(_ item: QueueItem) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(item.title)
+                .font(.headline)
+                .lineLimit(2)
+            if !item.subtitle.isEmpty {
+                Text(item.subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func progressControls(for item: QueueItem) -> some View {
+        VStack(spacing: 3) {
+            Slider(
+                value: $scrubPosition,
+                in: 0...max(1, playback.duration),
+                onEditingChanged: { editing in
+                    isScrubbing = editing
+                    if !editing {
+                        playback.seek(to: scrubPosition)
                     }
-                    .accessibilityLabel("Expand player")
-                    .accessibilityIdentifier("expand-player-button")
-                } else if item.source.isVideo {
-                    Button(action: onMinimize) {
-                        Image(systemName: "chevron.up")
-                            .font(.subheadline.weight(.semibold))
-                            .frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("Minimize player")
-                    .accessibilityIdentifier("minimize-player-button")
                 }
+            )
+            .accessibilityLabel("Playback position")
+
+            HStack {
+                Text((isScrubbing ? scrubPosition : playback.position).queueTimestamp)
+                Spacer()
+                if item.source == .youtube {
+                    Text(playback.duration.queueTimestamp)
+                } else {
+                    Text("-\(max(0, playback.duration - (isScrubbing ? scrubPosition : playback.position)).queueTimestamp)")
+                }
+            }
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Five equal slots keep Play centred under the title.
+    private var transportControls: some View {
+        HStack(spacing: 0) {
+            speedMenu
+                .frame(maxWidth: .infinity)
+
+            Button {
+                playback.skipBack()
+            } label: {
+                Image(systemName: "gobackward.15")
+                    .font(.title2)
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Skip back 15 seconds")
+            .frame(maxWidth: .infinity)
+
+            Button {
+                playback.playOrPause()
+            } label: {
+                playPauseGlyph(spinnerTint: Palette.onAccent)
+                    .font(.title2)
+                    .foregroundStyle(Palette.onAccent)
+                    .frame(width: 58, height: 58)
+                    .background(.tint, in: Circle())
+            }
+            .accessibilityLabel(playPauseAccessibilityLabel)
+            .accessibilityValue(playback.isWaitingForMedia ? "Loading" : "")
+            .accessibilityIdentifier("play-pause-button")
+            .frame(maxWidth: .infinity)
+
+            Button {
+                playback.skipForward()
+            } label: {
+                Image(systemName: "goforward.30")
+                    .font(.title2)
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Skip forward 30 seconds")
+            .frame(maxWidth: .infinity)
+
+            Button {
+                playback.playNext()
+            } label: {
+                Image(systemName: "forward.end.fill")
+                    .font(.title3)
+                    .frame(width: 44, height: 44)
+            }
+            .disabled(!playback.hasNextItem)
+            .accessibilityLabel("Next item")
+            .accessibilityIdentifier("next-item-button")
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var speedMenu: some View {
+        Menu {
+            ForEach(Self.playbackRates, id: \.self) { rate in
+                Button {
+                    playback.setPlaybackRate(rate)
+                } label: {
+                    if playback.playbackRate == rate {
+                        Label(rateLabel(rate), systemImage: "checkmark")
+                    } else {
+                        Text(rateLabel(rate))
+                    }
+                }
+            }
+        } label: {
+            Text(rateLabel(playback.playbackRate))
+                .font(.subheadline.weight(.bold).monospacedDigit())
+                .foregroundStyle(.primary)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Playback speed")
+        .accessibilityValue(rateLabel(playback.playbackRate))
+    }
+
+    private var sleepTimerMenu: some View {
+        Menu {
+            Section("Sleep Timer") {
+                ForEach(Self.sleepTimerMinutes, id: \.self) { minutes in
+                    Button(sleepTimerTitle(minutes: minutes)) {
+                        playback.setSleepTimer(minutes: minutes)
+                    }
+                }
+                Button("End of Item") {
+                    playback.setSleepTimerAtEndOfItem()
+                }
+            }
+            if playback.sleepTimer != .off {
+                Button("Turn Off Timer", role: .destructive) {
+                    playback.cancelSleepTimer()
+                }
+            }
+        } label: {
+            sleepTimerLabel
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Sleep timer")
+        .accessibilityValue(sleepTimerAccessibilityValue)
+    }
+
+    @ViewBuilder
+    private var sleepTimerLabel: some View {
+        switch playback.sleepTimer {
+        case .off:
+            Image(systemName: "moon.zzz")
+        case let .until(date):
+            HStack(spacing: 3) {
+                Image(systemName: "moon.zzz.fill")
+                Text(date, style: .timer)
+                    .font(.caption.monospacedDigit())
+            }
+        case .endOfItem:
+            HStack(spacing: 3) {
+                Image(systemName: "moon.zzz.fill")
+                Text("End")
+                    .font(.caption)
             }
         }
     }
 
+    private func sleepTimerTitle(minutes: Int) -> String {
+        minutes == 60 ? "1 hour" : "\(minutes) minutes"
+    }
+
+    private var sleepTimerAccessibilityValue: String {
+        switch playback.sleepTimer {
+        case .off:
+            "Off"
+        case let .until(date):
+            "Pauses at \(date.formatted(date: .omitted, time: .shortened))"
+        case .endOfItem:
+            "Pauses at the end of this item"
+        }
+    }
+
+    private func shareButton(for url: URL, title: String) -> some View {
+        ShareLink(item: url, subject: Text(title)) {
+            Image(systemName: "square.and.arrow.up")
+                .frame(width: 44, height: 44)
+        }
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                playback.youtubePlayerWillBeCovered()
+            }
+        )
+        .accessibilityLabel("Share video")
+        .accessibilityIdentifier("share-current-video-button")
+    }
+
+    // MARK: - Compact
+
     @ViewBuilder
-    private func currentContent(_ item: QueueItem) -> some View {
+    private func compactContent(_ item: QueueItem) -> some View {
+        HStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                if !item.subtitle.isEmpty {
+                    Text(item.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if playback.transportState != .requiresYouTubeApp {
+                Button {
+                    playback.playOrPause()
+                } label: {
+                    playPauseGlyph(spinnerTint: nil)
+                        .font(.title3)
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel(playPauseAccessibilityLabel)
+                .accessibilityValue(playback.isWaitingForMedia ? "Loading" : "")
+                .accessibilityIdentifier("play-pause-button")
+            }
+
+            Button(action: onExpand) {
+                Image(systemName: "chevron.down")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Expand player")
+            .accessibilityIdentifier("expand-player-button")
+        }
+
         switch item.source {
         case .podcast:
-            podcastIdentity(item)
+            EmptyView()
         case .socialVideo:
             socialVideoSurface
         case .youtube:
             youtubeSurface(item)
         }
 
-        if !isCompact {
-            VStack(spacing: 3) {
-                Text(item.title)
-                    .font(.headline)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                if !item.subtitle.isEmpty {
-                    Text(item.subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-
-            if playback.transportState == .requiresYouTubeApp {
-                openInYouTubeButton(for: item)
-            } else {
-                progressControls(for: item)
-                transportControls
-            }
-
-            if let notice = playback.notice {
-                Label(notice, systemImage: "info.circle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-        } else if playback.transportState == .requiresYouTubeApp {
+        if playback.transportState == .requiresYouTubeApp {
             openInYouTubeButton(for: item)
+        } else if playback.duration > 0 {
+            ProgressView(
+                value: min(max(0, playback.position), playback.duration),
+                total: playback.duration
+            )
+            .accessibilityLabel("Playback progress")
         }
+
+        if let notice = playback.notice {
+            Text(notice)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - Idle
+
+    private var idleContent: some View {
+        let hasUnplayed = queue.firstUnplayed() != nil
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 15) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.12, green: 0.25, blue: 0.33),
+                                    .indigo.opacity(0.75)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    Image(systemName: "waveform")
+                        .font(.title.weight(.semibold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 64, height: 64)
+                .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(hasUnplayed ? "Ready when you are" : "Nothing waiting")
+                        .font(.headline)
+                    Text(
+                        hasUnplayed
+                            ? "Press Play. The queue handles the rest."
+                            : "Share something worth hearing."
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 6)
+
+                Button {
+                    playback.playOrPause()
+                } label: {
+                    Image(systemName: "play.fill")
+                        .font(.title3)
+                        .foregroundStyle(Palette.onAccent)
+                        .frame(width: 52, height: 52)
+                        .background(.tint, in: Circle())
+                }
+                .disabled(!hasUnplayed)
+                .accessibilityLabel("Play queue")
+                .accessibilityIdentifier("play-queue-button")
+            }
+
+            noticeLabel
+        }
+    }
+
+    // MARK: - Shared pieces
+
+    @ViewBuilder
+    private var noticeLabel: some View {
+        if let notice = playback.notice {
+            Label(notice, systemImage: "info.circle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private func playPauseGlyph(spinnerTint: Color?) -> some View {
+        if playback.isWaitingForMedia {
+            ProgressView()
+                .tint(spinnerTint)
+        } else {
+            Image(
+                systemName: playback.transportState.isPlaying
+                    ? "pause.fill"
+                    : "play.fill"
+            )
+        }
+    }
+
+    private var playPauseAccessibilityLabel: String {
+        playback.transportState.isPlaying ? "Pause" : "Play"
     }
 
     private func openInYouTubeButton(for item: QueueItem) -> some View {
@@ -201,159 +496,6 @@ struct NowPlayingCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityHint("Official YouTube embedded player")
             }
-        }
-    }
-
-    private func podcastIdentity(_ item: QueueItem) -> some View {
-        HStack(spacing: 14) {
-            ArtworkView(url: item.artworkURL, source: item.source, size: 82)
-            VStack(alignment: .leading, spacing: 7) {
-                Text(item.hasMeaningfulProgress ? "RESUME" : "UP NEXT")
-                    .font(.caption2.weight(.bold))
-                    .tracking(1)
-                    .foregroundStyle(.tint)
-                Text(item.duration > 0 ? item.remainingDuration.queueCompactDuration + " remaining" : "Ready to play")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-        }
-    }
-
-    private func progressControls(for item: QueueItem) -> some View {
-        VStack(spacing: 3) {
-            Slider(
-                value: $scrubPosition,
-                in: 0...max(1, playback.duration),
-                onEditingChanged: { editing in
-                    isScrubbing = editing
-                    if !editing {
-                        playback.seek(to: scrubPosition)
-                    }
-                }
-            )
-            .accessibilityLabel("Playback position")
-
-            HStack {
-                Text((isScrubbing ? scrubPosition : playback.position).queueTimestamp)
-                Spacer()
-                if item.source == .youtube {
-                    Text(playback.duration.queueTimestamp)
-                } else {
-                    Text("-\(max(0, playback.duration - (isScrubbing ? scrubPosition : playback.position)).queueTimestamp)")
-                }
-            }
-            .font(.caption2.monospacedDigit())
-            .foregroundStyle(.secondary)
-        }
-    }
-
-    private var transportControls: some View {
-        HStack(spacing: 30) {
-            Button {
-                playback.skipBack()
-            } label: {
-                Image(systemName: "gobackward.15")
-                    .font(.title2)
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityLabel("Skip back 15 seconds")
-
-            Button {
-                playback.playOrPause()
-            } label: {
-                Image(
-                    systemName: playback.transportState.isPlaying
-                        ? "pause.fill"
-                        : "play.fill"
-                )
-                .font(.title2)
-                .foregroundStyle(Palette.onAccent)
-                .frame(width: 58, height: 58)
-                .background(.tint, in: Circle())
-            }
-            .accessibilityLabel(
-                playback.transportState.isPlaying ? "Pause" : "Play"
-            )
-            .accessibilityIdentifier("play-pause-button")
-
-            Button {
-                playback.skipForward()
-            } label: {
-                Image(systemName: "goforward.30")
-                    .font(.title2)
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityLabel("Skip forward 30 seconds")
-
-            Menu {
-                ForEach([0.75, 1, 1.25, 1.5, 1.75, 2], id: \.self) { rate in
-                    Button {
-                        playback.setPlaybackRate(rate)
-                    } label: {
-                        if playback.playbackRate == rate {
-                            Label(rateLabel(rate), systemImage: "checkmark")
-                        } else {
-                            Text(rateLabel(rate))
-                        }
-                    }
-                }
-            } label: {
-                Text(rateLabel(playback.playbackRate))
-                    .font(.caption.weight(.bold))
-                    .frame(minWidth: 36)
-            }
-            .accessibilityLabel("Playback speed")
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var idleContent: some View {
-        HStack(spacing: 15) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.12, green: 0.25, blue: 0.33),
-                                .indigo.opacity(0.75)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                Image(systemName: "waveform")
-                    .font(.largeTitle.weight(.semibold))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 84, height: 84)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(queue.firstUnplayed() == nil ? "Nothing waiting" : "Ready when you are")
-                    .font(.headline)
-                Text(
-                    queue.firstUnplayed() == nil
-                        ? "Share something worth hearing."
-                        : "Press Play. The queue handles the rest."
-                )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 6)
-
-            Button {
-                playback.playOrPause()
-            } label: {
-                Image(systemName: "play.fill")
-                    .font(.title3)
-                    .foregroundStyle(Palette.onAccent)
-                    .frame(width: 52, height: 52)
-                    .background(.tint, in: Circle())
-            }
-            .disabled(queue.firstUnplayed() == nil)
-            .accessibilityLabel("Play queue")
-            .accessibilityIdentifier("play-queue-button")
         }
     }
 

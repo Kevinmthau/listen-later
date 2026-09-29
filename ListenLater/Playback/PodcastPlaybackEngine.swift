@@ -3,6 +3,8 @@ import Foundation
 
 enum PodcastPlaybackEvent: Equatable {
     case timeChanged(position: TimeInterval, duration: TimeInterval)
+    /// True while playback is wanted but media isn't flowing yet.
+    case bufferingChanged(Bool)
     case ended
     case stalled(String)
     case failed(String)
@@ -252,8 +254,10 @@ final class AVPlayerPodcastEngine: PodcastPlaybackEngine {
         switch status {
         case .playing:
             cancelPlaybackWatchdog()
+            eventHandler?(loadID, .bufferingChanged(false))
         case .paused, .waitingToPlayAtSpecifiedRate:
             armPlaybackWatchdog(for: loadID)
+            eventHandler?(loadID, .bufferingChanged(true))
         @unknown default:
             armPlaybackWatchdog(for: loadID)
         }

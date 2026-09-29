@@ -69,6 +69,8 @@ struct YouTubePlayerView: UIViewRepresentable {
                     model.receive(.ready, loadID: nil, videoID: nil)
                 case "playing":
                     model.receive(.playing, loadID: loadID, videoID: videoID)
+                case "buffering":
+                    model.receive(.buffering, loadID: loadID, videoID: videoID)
                 case "paused":
                     model.receive(.paused, loadID: loadID, videoID: videoID)
                 case "ended":
@@ -232,6 +234,9 @@ struct YouTubePlayerView: UIViewRepresentable {
                   postPlayerEvent(generation, request, event.target, "paused");
                 }
                 if (request.acceptingEvents) {
+                  if (event.data === YT.PlayerState.BUFFERING) {
+                    postPlayerEvent(generation, request, event.target, "buffering");
+                  }
                   if (event.data === YT.PlayerState.PAUSED) {
                     postPlayerEvent(generation, request, event.target, "paused");
                   }

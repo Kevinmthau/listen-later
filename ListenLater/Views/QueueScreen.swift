@@ -106,7 +106,8 @@ struct QueueScreen: View {
                     model.playback.youtubePlayerWillBeCovered()
                 }
             }
-            .onChange(of: model.playback.currentItemID) { _, _ in
+            .onChange(of: model.playback.currentItemID) { _, newValue in
+                guard newValue == nil else { return }
                 withAnimation(.snappy(duration: 0.25)) {
                     isPlayerCompact = false
                 }
@@ -174,7 +175,7 @@ struct QueueScreen: View {
                 guard
                     !isPlayerCompact,
                     !editMode.isEditing,
-                    model.playback.currentItem?.source.isVideo == true,
+                    model.playback.currentItem != nil,
                     verticalDistance < -24,
                     abs(verticalDistance) > abs(value.translation.width)
                 else { return }
