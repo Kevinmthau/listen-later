@@ -100,7 +100,7 @@ struct QueueRow: View {
             components.append("Played")
         }
         if item.status == .unavailable {
-            components.append("Unavailable")
+            components.append(item.unavailableReason ?? "Unavailable")
         }
         return components.filter { !$0.isEmpty }.joined(separator: ", ")
     }

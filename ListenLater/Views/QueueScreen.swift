@@ -134,9 +134,11 @@ struct QueueScreen: View {
                     model.playback.youtubePlayerWillBeCovered()
                 }
             }
-            .onChange(of: model.queue.userMessage) { _, message in
+            .onChange(of: model.queue.userMessage, initial: true) { _, message in
                 // Problems are toasts: they don't cover the player or
-                // demand a tap, so YouTube keeps playing.
+                // demand a tap, so YouTube keeps playing. `initial` shows
+                // one reported before this screen appeared, such as a
+                // failure to load the queue.
                 guard let message else { return }
                 model.queue.userMessage = nil
                 showToast(Toast(message: message.text))
