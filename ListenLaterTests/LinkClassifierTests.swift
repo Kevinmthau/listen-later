@@ -39,6 +39,7 @@ final class LinkClassifierTests: XCTestCase {
             "http://www.example.com/episode": "https://",
             "https://open.spotify.com/episode/4rOoJ6Egrf8K2IrywzwOMk": "Spotify",
             "https://spotify.link/abc123": "Spotify",
+            "https://www.spotify.com/us/premium/": "Spotify",
             "https://www.tiktok.com/@user/video/1234567890": "TikTok",
             "https://music.apple.com/us/album/1": "Apple Music",
             "https://www.youtube.com/@channel": "YouTube",
@@ -88,6 +89,11 @@ final class LinkClassifierTests: XCTestCase {
             LinkClassifier.link(fromUserText: "Old link: http://example.com/a")?.absoluteString,
             "http://example.com/a",
             "An http link is still returned, so the classifier can say why it's refused."
+        )
+        XCTAssertEqual(
+            LinkClassifier.link(fromUserText: "Via NPR.org http://n.pr/3xYz")?.absoluteString,
+            "http://n.pr/3xYz",
+            "A site named before an http link isn't the link."
         )
     }
 

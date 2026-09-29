@@ -44,12 +44,14 @@ enum LinkClassifier {
         if isLikelyAudioURL(url) {
             return .audioFile
         }
-        // Spotify's player and share links only. Other spotify.com hosts,
-        // such as podcasters.spotify.com episode pages, belong to RSS shows
-        // and are searched like any web page.
-        if host.matchesDomain(in: [
-            "open.spotify.com", "play.spotify.com", "spotify.link", "spotify.app.link", "spoti.fi",
-        ]) {
+        // Spotify's own site, player and share links. Other spotify.com
+        // hosts, such as podcasters.spotify.com episode pages, belong to RSS
+        // shows and are searched like any web page.
+        if ["spotify.com", "www.spotify.com"].contains(host)
+            || host.matchesDomain(in: [
+                "open.spotify.com", "play.spotify.com", "spotify.link", "spotify.app.link", "spoti.fi",
+            ])
+        {
             return .unsupported(
                 "Spotify episodes can only play in Spotify. Share the episode from Apple Podcasts or the show’s website instead."
             )
@@ -69,10 +71,10 @@ enum LinkClassifier {
 
     /// Turns typed, pasted or shared text into a link: a bare
     /// "example.com/episode" gets https://, and a link inside a sentence is
-    /// found. Within text, an explicit https:// link wins over a bare domain,
-    /// which wins over an http:// link: shared text often names a site
-    /// ("Via NPR.org") before the real link. Returns nil when the text holds
-    /// no web link.
+    /// found. Within text, an explicit https:// link wins, then an http://
+    /// one (so the classifier can say why it's refused), then a bare domain:
+    /// shared text often names a site ("Via NPR.org") before the real link.
+    /// Returns nil when the text holds no web link.
     static func link(fromUserText text: String) -> URL? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -116,13 +118,16 @@ enum LinkClassifier {
                 explicitHTTPS = explicitHTTPS ?? url
             } else if lowercased.hasPrefix("http://") {
                 explicitHTTP = explicitHTTP ?? url
-            } else if !matched.contains("://") {
+            } else if !matched.contains("://"),
+                      var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            {
                 // The detector gives a bare domain http://; upgrade it, as
                 // for a bare link above.
-                bareDomain = bareDomain ?? URL(string: "https://\(matched)")
+                components.scheme = "https"
+                bareDomain = bareDomain ?? components.url
             }
         }
-        return explicitHTTPS ?? bareDomain ?? explicitHTTP
+        return explicitHTTPS ?? explicitHTTP ?? bareDomain
     }
 }
 
