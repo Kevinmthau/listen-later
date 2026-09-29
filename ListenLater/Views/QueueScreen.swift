@@ -317,6 +317,8 @@ struct QueueScreen: View {
                 isPlaying: model.playback.currentItemID == item.id
                     && model.playback.transportState.isPlaying
             )
+            // The whole row is the target, including its empty space.
+            .contentShape(Rectangle())
         }
         .listRowBackground(
             model.playback.currentItemID == item.id
