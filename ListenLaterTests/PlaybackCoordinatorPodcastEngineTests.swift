@@ -356,6 +356,22 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(harness.coordinator.transportState, .playing)
     }
 
+    func testNowPlayingIsLeftAloneWhilePlayingIfNothingChanged() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        harness.coordinator.start(first)
+        harness.engine.emit(.timeChanged(position: 42, duration: 300))
+
+        harness.coordinator.reconcileQueueState()
+
+        let info = MPNowPlayingInfoCenter.default().nowPlayingInfo
+        XCTAssertEqual(
+            info?[MPNowPlayingInfoPropertyElapsedPlaybackTime] as? TimeInterval,
+            0,
+            "The system advances elapsed time itself; a rewrite would reset it."
+        )
+    }
+
     func testNearEndProgressDoesNotMarkPlayedOrAdvanceBeforeActivePlayerEnds() throws {
         let harness = try makeHarness()
         let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)

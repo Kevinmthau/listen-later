@@ -600,7 +600,9 @@ final class PlaybackCoordinator {
         // progress disagrees; otherwise each save would prompt another.
         if transportState == .playing {
             // The queue's length or the item's details may have changed.
-            if item.source != .youtube {
+            // Only rewrite Now Playing then: its elapsed time comes from the
+            // last progress update, so each rewrite nudges the scrubber back.
+            if item.source != .youtube, nowPlayingIsOutdated(for: item) {
                 updateNowPlaying()
             }
             let storedPositionDisagrees =
@@ -1237,6 +1239,18 @@ final class PlaybackCoordinator {
             info[MPNowPlayingInfoPropertyPlaybackQueueCount] = queue.items.count
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    /// Whether Now Playing shows another title or queue position than
+    /// `item` has now.
+    private func nowPlayingIsOutdated(for item: QueueItem) -> Bool {
+        let info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+        return info[MPMediaItemPropertyTitle] as? String != item.title
+            || info[MPMediaItemPropertyArtist] as? String != item.subtitle
+            || info[MPMediaItemPropertyPlaybackDuration] as? TimeInterval != duration
+            || info[MPNowPlayingInfoPropertyPlaybackQueueIndex] as? Int
+                != queue.items.firstIndex(where: { $0.id == item.id })
+            || info[MPNowPlayingInfoPropertyPlaybackQueueCount] as? Int != queue.items.count
     }
 
     private func clearNowPlaying() {
