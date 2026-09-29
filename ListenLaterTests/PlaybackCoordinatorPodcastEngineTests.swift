@@ -290,6 +290,58 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertNotEqual(harness.coordinator.currentItemID, second.id)
     }
 
+    func testReconcilingWhilePlayingLeavesAgreeingProgressAlone() throws {
+        let harness = try makeHarness()
+        let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        harness.coordinator.start(item)
+        item.progressUpdatedAt = .distantPast
+        harness.engine.emit(.timeChanged(position: 120, duration: 300))
+        let savedAt = item.progressUpdatedAt
+        harness.engine.emit(.timeChanged(position: 124, duration: 300))
+
+        harness.coordinator.reconcileQueueState()
+
+        XCTAssertEqual(
+            item.progressUpdatedAt,
+            savedAt,
+            "This device's own save coming back must not prompt another."
+        )
+        XCTAssertEqual(item.playbackPosition, 120)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+    }
+
+    func testReconcilingWhilePlayingReassertsProgressAnotherDeviceChanged() throws {
+        let harness = try makeHarness()
+        let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        harness.coordinator.start(item)
+        item.progressUpdatedAt = .distantPast
+        harness.engine.emit(.timeChanged(position: 120, duration: 300))
+
+        // An older session on another device syncs in.
+        harness.queue.saveProgress(for: item, position: 30, force: true)
+        harness.coordinator.reconcileQueueState()
+
+        XCTAssertEqual(item.playbackPosition, 120)
+        XCTAssertEqual(harness.coordinator.position, 120)
+        XCTAssertFalse(harness.engine.seekCalls.contains(30))
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+    }
+
+    func testReconcilingWhilePausedDoesNotSeekForThisDevicesOwnSave() throws {
+        let harness = try makeHarness()
+        let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 900)
+        harness.coordinator.start(item)
+        harness.engine.emit(.timeChanged(position: 200, duration: 900))
+        harness.coordinator.pause()
+        let seekCount = harness.engine.seekCalls.count
+
+        harness.coordinator.reconcileQueueState()
+
+        XCTAssertEqual(harness.engine.seekCalls.count, seekCount)
+        XCTAssertEqual(harness.coordinator.position, 200)
+        XCTAssertEqual(harness.coordinator.transportState, .paused)
+    }
+
     func testNearEndProgressDoesNotMarkPlayedOrAdvanceBeforeActivePlayerEnds() throws {
         let harness = try makeHarness()
         let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
@@ -813,10 +865,16 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
 
         harness.coordinator.start(item)
         XCTAssertFalse(harness.coordinator.isWaitingForMedia)
+        XCTAssertEqual(harness.coordinator.activity, .playing)
 
         harness.engine.emit(.bufferingChanged(true))
         XCTAssertTrue(harness.coordinator.isBuffering)
         XCTAssertTrue(harness.coordinator.isWaitingForMedia)
+        XCTAssertEqual(harness.coordinator.activity, .buffering)
+        XCTAssertTrue(
+            harness.coordinator.activity.pausesOnTap,
+            "Buffering is still playing, so Play is a Pause button."
+        )
 
         harness.engine.emit(.bufferingChanged(false))
         XCTAssertFalse(harness.coordinator.isWaitingForMedia)
@@ -825,6 +883,8 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         harness.coordinator.pause()
         XCTAssertFalse(harness.coordinator.isBuffering)
         XCTAssertFalse(harness.coordinator.isWaitingForMedia)
+        XCTAssertEqual(harness.coordinator.activity, .paused)
+        XCTAssertFalse(harness.coordinator.activity.pausesOnTap)
 
         harness.engine.emit(.bufferingChanged(true))
         XCTAssertFalse(
@@ -842,6 +902,8 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
 
         XCTAssertEqual(harness.coordinator.transportState, .loading)
         XCTAssertTrue(harness.coordinator.isWaitingForMedia)
+        XCTAssertEqual(harness.coordinator.activity, .resolving)
+        XCTAssertEqual(harness.coordinator.activity.rowStatus, "Fetching details")
     }
 
     func testNextIsAvailableOnlyWhenAnotherItemCanPlay() throws {

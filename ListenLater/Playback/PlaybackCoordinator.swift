@@ -17,6 +17,55 @@ enum PlaybackTransportState: Equatable {
     }
 }
 
+/// What playback is doing, in the terms the player and the queue show.
+/// Derived in one place from the transport state and its flags, so the Play
+/// button, the playing row and VoiceOver always agree.
+enum PlaybackActivity: Equatable {
+    /// Nothing is loaded.
+    case idle
+    /// Fetching the item's details or a fresh link to its media.
+    case resolving
+    /// Loading the media before it starts.
+    case loading
+    /// Playing, but waiting for more of the media.
+    case buffering
+    case playing
+    case paused
+    /// A YouTube video waits until MushRadio is on screen.
+    case waitingForScreen
+    /// Play needs a tap, for example after YouTube blocked autoplay.
+    case needsTap
+    /// This video plays only in the YouTube app.
+    case playsInYouTubeApp
+
+    /// Play shows a spinner instead of its symbol.
+    var isWaitingForMedia: Bool {
+        switch self {
+        case .resolving, .loading, .buffering: true
+        default: false
+        }
+    }
+
+    /// Play is a Pause button: playback is under way, even if it's waiting
+    /// for data.
+    var pausesOnTap: Bool {
+        self == .playing || self == .buffering
+    }
+
+    /// Describes the current item in its queue row.
+    var rowStatus: String {
+        switch self {
+        case .idle, .paused: "Paused"
+        case .resolving: "Fetching details"
+        case .loading, .buffering: "Loading"
+        case .playing: "Now playing"
+        case .waitingForScreen: "Needs screen"
+        case .needsTap: "Tap to play"
+        case .playsInYouTubeApp: "Plays in the YouTube app"
+        }
+    }
+}
+
 enum SleepTimer: Equatable {
     case off
     /// Pause playback at this time.
@@ -28,6 +77,11 @@ enum SleepTimer: Equatable {
 @MainActor
 @Observable
 final class PlaybackCoordinator {
+    /// How far saved progress may trail the playing position before it
+    /// counts as another device's: progress is saved every 5 seconds, at up
+    /// to 2x speed.
+    static let syncedProgressTolerance: TimeInterval = 15
+
     private(set) var currentItemID: UUID?
     private(set) var transportState: PlaybackTransportState = .idle
     private(set) var position: TimeInterval = 0
@@ -79,9 +133,29 @@ final class PlaybackCoordinator {
         podcastEngine.renderingPlayer
     }
 
+    /// The one state the UI reads; see `PlaybackActivity`.
+    var activity: PlaybackActivity {
+        switch transportState {
+        case .idle:
+            .idle
+        case .loading:
+            currentItem?.status == QueueItemStatus.resolving ? .resolving : .loading
+        case .playing:
+            isBuffering ? .buffering : .playing
+        case .paused:
+            .paused
+        case .waitingForForeground:
+            .waitingForScreen
+        case .needsUserAction:
+            .needsTap
+        case .requiresYouTubeApp:
+            .playsInYouTubeApp
+        }
+    }
+
     /// True while the play control should show progress instead of a glyph.
     var isWaitingForMedia: Bool {
-        transportState == .loading || (transportState == .playing && isBuffering)
+        activity.isWaitingForMedia
     }
 
     /// Whether Next has another item to move to.
@@ -146,7 +220,7 @@ final class PlaybackCoordinator {
     }
 
     func playOrPause() {
-        if transportState.isPlaying {
+        if activity.pausesOnTap {
             pause()
         } else {
             play()
@@ -521,7 +595,13 @@ final class PlaybackCoordinator {
         // that playback session. This prevents a delayed CloudKit merge from
         // seeking playback backward, and prevents near-end progress from
         // stopping the player before its terminal event advances the queue.
+        // Reconciling runs whenever the store changes, including after this
+        // device's own saves, so it writes only when another device's
+        // progress disagrees; otherwise each save would prompt another.
         if transportState == .playing {
+            let storedPositionDisagrees =
+                abs(item.playbackPosition - position) > Self.syncedProgressTolerance
+            guard item.isPlayed || storedPositionDisagrees else { return }
             item.isPlayed = false
             queue.saveProgress(
                 for: item,
@@ -539,11 +619,18 @@ final class PlaybackCoordinator {
             return
         }
 
-        position = max(0, item.playbackPosition)
+        let syncedPosition = max(0, item.playbackPosition)
+        let syncedRate = item.playbackRate > 0 ? item.playbackRate : 1
+        let syncedProgressChanged =
+            abs(syncedPosition - position) >= 0.5 || abs(syncedRate - playbackRate) >= 0.001
+        position = syncedPosition
         duration = max(0, item.duration)
-        playbackRate = item.playbackRate > 0 ? item.playbackRate : 1
+        playbackRate = syncedRate
 
         if preparedItemID == item.id {
+            // This device's own saves come back unchanged; only seek for
+            // progress saved elsewhere.
+            guard syncedProgressChanged else { return }
             switch item.source {
             case .podcast, .socialVideo:
                 podcastEngine.seek(to: position)

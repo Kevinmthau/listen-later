@@ -301,7 +301,7 @@ final class QueueStore {
             reordered.count
         )
         reordered.insert(contentsOf: moving, at: insertionIndex)
-        applyRanks(to: reordered)
+        applyRanks(to: reordered, moved: moving)
     }
 
     func moveUpNext(from source: IndexSet, to destination: Int) {
@@ -322,7 +322,7 @@ final class QueueStore {
         let reordered = items.compactMap { item in
             item.isInPlayedSection ? item : upNextIterator.next()
         }
-        applyRanks(to: reordered)
+        applyRanks(to: reordered, moved: moving)
     }
 
     /// Puts `item` ahead of every other Up Next item. Up Next plays top to
@@ -334,7 +334,7 @@ final class QueueStore {
         var reordered = items.filter { $0.id != item.id }
         let insertionIndex = reordered.firstIndex { $0.id == first.id } ?? 0
         reordered.insert(item, at: insertionIndex)
-        applyRanks(to: reordered)
+        applyRanks(to: reordered, moved: [item])
     }
 
     /// Puts `item` after every other Up Next item, e.g. when it is skipped.
@@ -345,7 +345,7 @@ final class QueueStore {
         let lastIndex = reordered.firstIndex { $0.id == last.id }
             ?? reordered.index(before: reordered.endIndex)
         reordered.insert(item, at: lastIndex + 1)
-        applyRanks(to: reordered)
+        applyRanks(to: reordered, moved: [item])
     }
 
     /// Makes `item` the next to play: first among the Up Next items other
@@ -369,7 +369,7 @@ final class QueueStore {
             insertionIndex = reordered.count
         }
         reordered.insert(item, at: insertionIndex)
-        applyRanks(to: reordered)
+        applyRanks(to: reordered, moved: [item])
     }
 
     /// Deletes `item` and returns what Undo needs to recreate it. Other
@@ -766,15 +766,107 @@ final class QueueStore {
     }
 
     private func nextRank() -> Double {
-        (items.last?.sortRank ?? 0) + 1_000
+        (items.last?.sortRank ?? 0) + Self.rankSpacing
     }
 
-    private func applyRanks(to reordered: [QueueItem]) {
-        for (index, item) in reordered.enumerated() {
-            item.sortRank = Double(index + 1) * 1_000
-            item.updatedAt = Date()
+    /// Ranks the queue in `reordered`'s order by changing as few items as
+    /// possible: usually just the ones in `moved`, which get ranks between
+    /// their neighbours. A move then saves one record per changed item, not
+    /// the whole queue, and leaves other records alone for other devices to
+    /// edit without conflicts. Only when neighbours are too close to fit
+    /// between is every rank reset.
+    private func applyRanks(to reordered: [QueueItem], moved: [QueueItem]) {
+        guard reordered.map(\.id) != items.map(\.id) else { return }
+        let now = Date()
+        if let ranks = Self.ranks(for: reordered, preferringToMove: Set(moved.map(\.id))) {
+            for item in reordered {
+                guard let rank = ranks[item.id] else { continue }
+                item.sortRank = rank
+                item.updatedAt = now
+            }
+        } else {
+            for (index, item) in reordered.enumerated() {
+                let rank = Double(index + 1) * Self.rankSpacing
+                guard item.sortRank != rank else { continue }
+                item.sortRank = rank
+                item.updatedAt = now
+            }
         }
         saveAndRefresh()
+    }
+
+    static let rankSpacing: Double = 1_000
+    /// Closer than this, neighbours are renumbered rather than split again.
+    static let minimumRankGap: Double = 0.001
+
+    /// New ranks for the items of `reordered` that must change for ranks to
+    /// rise along it, or nil when one has no room between its neighbours.
+    ///
+    /// The longest run of items whose ranks already rise keeps them, choosing,
+    /// among runs of equal length, the one that keeps the most items outside
+    /// `preferredIDs`. The others are spread evenly between the kept items on
+    /// either side.
+    private static func ranks(
+        for reordered: [QueueItem],
+        preferringToMove preferredIDs: Set<UUID>
+    ) -> [UUID: Double]? {
+        let current = reordered.map(\.sortRank)
+        var score = [Int](repeating: 0, count: current.count)
+        var previous = [Int?](repeating: nil, count: current.count)
+        for index in current.indices {
+            // Length first; the extra point breaks ties towards unmoved items.
+            let weight = preferredIDs.contains(reordered[index].id) ? 1_000_000 : 1_000_001
+            score[index] = weight
+            for earlier in 0..<index
+            where current[earlier] < current[index] && score[earlier] + weight > score[index] {
+                score[index] = score[earlier] + weight
+                previous[index] = earlier
+            }
+        }
+        var kept = Set<Int>()
+        var cursor = score.indices.max { score[$0] < score[$1] }
+        while let index = cursor {
+            kept.insert(index)
+            cursor = previous[index]
+        }
+
+        var ranks: [UUID: Double] = [:]
+        var index = 0
+        while index < current.count {
+            guard !kept.contains(index) else {
+                index += 1
+                continue
+            }
+            let runStart = index
+            while index < current.count, !kept.contains(index) {
+                index += 1
+            }
+            let lower = runStart > 0 ? current[runStart - 1] : nil
+            let upper = index < current.count ? current[index] : nil
+            let count = Double(index - runStart)
+
+            let first: Double
+            let step: Double
+            switch (lower, upper) {
+            case let (lower?, upper?):
+                step = (upper - lower) / (count + 1)
+                guard step >= minimumRankGap else { return nil }
+                first = lower + step
+            case let (lower?, nil):
+                step = rankSpacing
+                first = lower + step
+            case let (nil, upper?):
+                step = rankSpacing
+                first = upper - count * step
+            case (nil, nil):
+                step = rankSpacing
+                first = rankSpacing
+            }
+            for offset in 0..<(index - runStart) {
+                ranks[reordered[runStart + offset].id] = first + Double(offset) * step
+            }
+        }
+        return ranks
     }
 
     @discardableResult

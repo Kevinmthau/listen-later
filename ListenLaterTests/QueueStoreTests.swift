@@ -264,12 +264,13 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertFalse(item.isPlayed)
     }
 
-    func testReorderAndMoveToPlayNextPersistDeterministicRanks() throws {
+    func testMovesRankOnlyTheMovedItemBetweenItsNeighbours() throws {
         let harness = try makeHarness()
         let first = appendItem(to: harness.store, ordinal: 1)
         let second = appendItem(to: harness.store, ordinal: 2)
         let third = appendItem(to: harness.store, ordinal: 3)
         let fourth = appendItem(to: harness.store, ordinal: 4)
+        let untouchedSince = first.updatedAt
 
         harness.store.move(from: IndexSet(integer: 3), to: 0)
 
@@ -279,8 +280,10 @@ final class QueueStoreTests: XCTestCase {
         )
         XCTAssertEqual(
             harness.store.items.map(\.sortRank),
-            [1_000, 2_000, 3_000, 4_000]
+            [0, 1_000, 2_000, 3_000],
+            "Only the moved item gets a new rank."
         )
+        XCTAssertEqual(first.updatedAt, untouchedSince)
 
         // `fourth` now leads Up Next, as the playing item does.
         harness.store.moveToPlayNext(third, after: fourth.id)
@@ -291,7 +294,7 @@ final class QueueStoreTests: XCTestCase {
         )
         XCTAssertEqual(
             harness.store.items.map(\.sortRank),
-            [1_000, 2_000, 3_000, 4_000]
+            [0, 500, 1_000, 2_000]
         )
     }
 
@@ -313,6 +316,41 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertEqual(harness.store.firstUnplayed(excluding: first.id)?.id, fourth.id)
     }
 
+    func testRepeatedMovesIntoOneGapRenumberTheQueueWhenItRunsOut() throws {
+        let harness = try makeHarness()
+        let first = appendItem(to: harness.store, ordinal: 1)
+        let second = appendItem(to: harness.store, ordinal: 2)
+        let third = appendItem(to: harness.store, ordinal: 3)
+
+        // Each move splits the gap after the first item in half; forty
+        // halvings of 1,000 would leave neighbours 1e-9 apart.
+        for _ in 0..<40 {
+            harness.store.moveUpNext(from: IndexSet(integer: 2), to: 1)
+        }
+
+        XCTAssertEqual(harness.store.items.map(\.id), [first.id, second.id, third.id])
+        let ranks = harness.store.items.map(\.sortRank)
+        for (lower, upper) in zip(ranks, ranks.dropFirst()) {
+            XCTAssertGreaterThanOrEqual(upper - lower, QueueStore.minimumRankGap)
+        }
+    }
+
+    func testMovingAnItemToWhereItAlreadyIsWritesNothing() throws {
+        let harness = try makeHarness()
+        let first = appendItem(to: harness.store, ordinal: 1)
+        let second = appendItem(to: harness.store, ordinal: 2)
+        appendItem(to: harness.store, ordinal: 3)
+        let ranks = harness.store.items.map(\.sortRank)
+        let untouchedSince = second.updatedAt
+
+        harness.store.moveUpNext(from: IndexSet(integer: 1), to: 1)
+        harness.store.moveUpNext(from: IndexSet(integer: 1), to: 2)
+        harness.store.moveToPlayNext(second, after: first.id)
+
+        XCTAssertEqual(harness.store.items.map(\.sortRank), ranks)
+        XCTAssertEqual(second.updatedAt, untouchedSince)
+    }
+
     func testMoveToPlayNextWithoutCurrentMovesItemToFront() throws {
         let harness = try makeHarness()
         let first = appendItem(to: harness.store, ordinal: 1)
@@ -327,7 +365,7 @@ final class QueueStoreTests: XCTestCase {
         )
         XCTAssertEqual(
             harness.store.items.map(\.sortRank),
-            [1_000, 2_000, 3_000]
+            [0, 1_000, 2_000]
         )
     }
 
@@ -360,6 +398,11 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertEqual(
             harness.store.items.map(\.id),
             [fourth.id, played.id, first.id, third.id]
+        )
+        XCTAssertEqual(
+            harness.store.items.map(\.sortRank),
+            [1_000, 2_000, 2_500, 3_000],
+            "The played item keeps its rank; the two items that crossed it move."
         )
     }
 
