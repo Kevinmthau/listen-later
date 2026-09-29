@@ -159,6 +159,19 @@ final class QueueStore {
         await resolve(item, preserveAvailabilityOnTransientFailure: true)
     }
 
+    /// Refreshes a social video's short-lived media link before its turn so
+    /// an automatic advance doesn't stop to fetch it. If this fails the item
+    /// stays ready, and its link is refreshed again when it starts.
+    func prefetchPlaybackURL(for item: QueueItem) async {
+        guard item.source == .socialVideo,
+              item.status == .ready,
+              self.item(id: item.id) != nil
+        else {
+            return
+        }
+        await resolve(item, preserveAvailabilityOnTransientFailure: true)
+    }
+
     func importPendingShares() async {
         guard let inbox, !isImportingShares else { return }
         isImportingShares = true
@@ -597,7 +610,6 @@ final class QueueStore {
         else {
             return
         }
-        let wasAwaitingResolution = item.status == .resolving
         isResolving = true
         defer {
             resolvingItemIDs.remove(itemID)
@@ -607,13 +619,17 @@ final class QueueStore {
         do {
             let resolved = try await providers.resolve(url)
             guard let liveItem = self.item(id: itemID) else { return }
+            // Decided now rather than when resolution began: playback may
+            // have started waiting on an item that was being prefetched.
+            let isAwaited = liveItem.status == .resolving
             apply(resolved, to: liveItem)
             saveAndRefresh()
-            if wasAwaitingResolution {
+            if isAwaited {
                 resolutionHandler?(liveItem)
             }
         } catch {
             guard let liveItem = self.item(id: itemID) else { return }
+            let isAwaited = liveItem.status == .resolving
             let policyExpiration = Date().addingTimeInterval(-30 * 24 * 60 * 60)
             let mustDeleteExpiredYouTubeMetadata =
                 liveItem.source == .youtube
@@ -642,10 +658,10 @@ final class QueueStore {
                 liveItem.unavailableReason = error.localizedDescription
                 liveItem.updatedAt = Date()
                 saveAndRefresh()
-            } else if liveItem.status == .resolving {
+            } else if isAwaited {
                 // Only this attempt failed, so a ready item whose link was
-                // being refreshed stays ready, with its old link, and can
-                // be tried again.
+                // being refreshed, which playback may be waiting on, stays
+                // ready with its old link and can be tried again.
                 liveItem.status = .ready
                 liveItem.updatedAt = Date()
                 saveAndRefresh()
@@ -656,7 +672,7 @@ final class QueueStore {
             } else {
                 recordFailure("\(url.host() ?? "A link"): \(reason)")
             }
-            if wasAwaitingResolution {
+            if isAwaited {
                 resolutionHandler?(liveItem)
             }
         }

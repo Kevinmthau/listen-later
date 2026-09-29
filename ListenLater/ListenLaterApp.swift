@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct ListenLaterApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
 
     private let container: ModelContainer

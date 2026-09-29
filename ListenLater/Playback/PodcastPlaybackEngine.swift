@@ -5,6 +5,12 @@ enum PodcastPlaybackEvent: Equatable {
     case timeChanged(position: TimeInterval, duration: TimeInterval)
     /// True while playback is wanted but media isn't flowing yet.
     case bufferingChanged(Bool)
+    /// Something other than the app paused playback: the full-screen
+    /// player, Picture in Picture, or the system.
+    case pausedExternally
+    /// Something other than the app resumed playback, e.g. the Play button
+    /// in the full-screen player or the Picture in Picture window.
+    case resumedExternally
     case ended
     case stalled(String)
     case failed(String)
@@ -93,11 +99,10 @@ final class AVPlayerPodcastEngine: PodcastPlaybackEngine {
         timeControlObservation = player.observe(
             \.timeControlStatus,
             options: [.new]
-        ) { [weak self] player, _ in
+        ) { [weak self] _, _ in
             guard let loadID = loadIdentity.current else { return }
-            let status = player.timeControlStatus
             Task { @MainActor in
-                self?.timeControlStatusDidChange(status, loadID: loadID)
+                self?.timeControlStatusDidChange(loadID: loadID)
             }
         }
     }
@@ -244,23 +249,56 @@ final class AVPlayerPodcastEngine: PodcastPlaybackEngine {
         }
     }
 
-    private func timeControlStatusDidChange(
-        _ status: AVPlayer.TimeControlStatus,
-        loadID: UUID
-    ) {
-        guard wantsPlayback, activeLoadID == loadID else {
+    /// The full-screen player and Picture in Picture drive the same AVPlayer,
+    /// so its status changes aren't all the app's own doing: a pause while
+    /// playback is wanted came from outside (a system or PiP control, or an
+    /// interruption), and playing while it isn't wanted means something
+    /// outside resumed it. Only waitingToPlayAtSpecifiedRate is buffering.
+    ///
+    /// The status is read now, not when it changed: the app may have played
+    /// or paused since, and an old status would look like someone else
+    /// doing the opposite.
+    private func timeControlStatusDidChange(loadID: UUID) {
+        guard activeLoadID == loadID else {
             return
         }
-        switch status {
+        switch player.timeControlStatus {
         case .playing:
             cancelPlaybackWatchdog()
-            eventHandler?(loadID, .bufferingChanged(false))
-        case .paused, .waitingToPlayAtSpecifiedRate:
+            if wantsPlayback {
+                eventHandler?(loadID, .bufferingChanged(false))
+            } else {
+                wantsPlayback = true
+                eventHandler?(loadID, .resumedExternally)
+            }
+        case .waitingToPlayAtSpecifiedRate:
+            if !wantsPlayback {
+                wantsPlayback = true
+                eventHandler?(loadID, .resumedExternally)
+            }
             armPlaybackWatchdog(for: loadID)
             eventHandler?(loadID, .bufferingChanged(true))
+        case .paused:
+            guard wantsPlayback else { return }
+            guard !isAtEndOfItem else {
+                // Reaching the end pauses too; the end notification that
+                // follows finishes the item and cancels this watchdog.
+                armPlaybackWatchdog(for: loadID)
+                return
+            }
+            wantsPlayback = false
+            cancelPlaybackWatchdog()
+            eventHandler?(loadID, .pausedExternally)
         @unknown default:
             armPlaybackWatchdog(for: loadID)
         }
+    }
+
+    private var isAtEndOfItem: Bool {
+        guard let item = player.currentItem else { return false }
+        let duration = item.duration.seconds
+        guard duration.isFinite, duration > 0 else { return false }
+        return item.currentTime().seconds >= duration - 0.5
     }
 
     private func armPlaybackWatchdog(for loadID: UUID) {

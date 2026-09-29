@@ -47,6 +47,17 @@ final class PlaybackCoordinator {
     @ObservationIgnored private let sleepTimerDelay: @Sendable (TimeInterval) async throws -> Void
     @ObservationIgnored private let videosWaitForScreen: () -> Bool
     @ObservationIgnored private var sleepTimerTask: Task<Void, Never>?
+    /// When each item's link was last prefetched. A failing resolver, or a
+    /// link that expires within a minute or two, is asked again only after
+    /// `prefetchRetryInterval`, not on every progress update; the entry is
+    /// dropped once a prefetch leaves the link fresh.
+    @ObservationIgnored private var prefetchAttempts: [UUID: Date] = [:]
+    /// A video in Picture in Picture is on screen, whatever the app's state.
+    @ObservationIgnored private var isPictureInPictureActive = false
+    /// When the player was last paused from outside the app. The system
+    /// pauses it at the start of an interruption too, and that can arrive
+    /// just before the interruption itself.
+    @ObservationIgnored private var externallyPausedAt: Date?
     @ObservationIgnored private var preparedItemID: UUID?
     @ObservationIgnored private var pendingResolutionAutoplayItemID: UUID?
     @ObservationIgnored private var activePodcastLoadID: UUID?
@@ -225,6 +236,7 @@ final class PlaybackCoordinator {
         )
         notice = sleepTimerHoldsPlayback ? Self.sleepTimerNotice : nil
         isBuffering = false
+        prefetchAttempts[item.id] = nil
         currentItemID = item.id
         preparedItemID = nil
         pendingResolutionAutoplayItemID = nil
@@ -568,7 +580,7 @@ final class PlaybackCoordinator {
         setRemoteCommandsEnabled(true)
         // Nobody can see a video that starts on its own in the background,
         // so leave it ready instead of playing its audio unseen.
-        let videoMustWait = item.source.isVideo && !isForeground && videosWaitForScreen()
+        let videoMustWait = item.source.isVideo && videosMustWait
         if autoplay, !videoMustWait {
             podcastEngine.play()
             isBuffering = !podcastEngine.isPlaying
@@ -649,10 +661,27 @@ final class PlaybackCoordinator {
             if durationChanged {
                 updateNowPlaying()
             }
+            prefetchNextVideoIfNeeded(after: item)
         case let .bufferingChanged(isWaiting):
             if transportState == .playing {
                 isBuffering = isWaiting
             }
+        case .pausedExternally:
+            // A pause from the full-screen player, Picture in Picture or
+            // the system, not buffering: show it as paused.
+            isBuffering = false
+            guard transportState == .playing else { return }
+            externallyPausedAt = Date()
+            transportState = .paused
+            saveCurrentProgress(force: true)
+            updateNowPlaying()
+        case .resumedExternally:
+            guard transportState != .playing else { return }
+            sleepTimerHoldsPlayback = false
+            notice = nil
+            transportState = .playing
+            isBuffering = !podcastEngine.isPlaying
+            updateNowPlaying()
         case .ended:
             activePodcastLoadID = nil
             completeItem(item)
@@ -718,6 +747,7 @@ final class PlaybackCoordinator {
                 duration: newDuration,
                 rate: playbackRate
             )
+            prefetchNextVideoIfNeeded(after: item)
         case let .playbackRateChanged(actualRate):
             guard actualRate.isFinite, actualRate > 0 else { return }
             playbackRate = actualRate
@@ -795,6 +825,46 @@ final class PlaybackCoordinator {
         }
     }
 
+    /// Social video links expire within minutes, so fetching one when its
+    /// turn comes leaves a gap between items. Refresh the next one while the
+    /// current item has under a minute left.
+    private func prefetchNextVideoIfNeeded(after item: QueueItem) {
+        let remaining = duration - position
+        let now = Date()
+        // The link must last until the current item ends, plus a margin.
+        let horizon = now.addingTimeInterval(max(0, remaining) + 5)
+        guard duration > 0,
+              remaining < 60,
+              let next = nextUnplayedItem(after: item),
+              next.source == .socialVideo,
+              next.status == .ready,
+              next.playbackURLNeedsRefresh(at: horizon),
+              prefetchAttempts[next.id].map({
+                  now.timeIntervalSince($0) >= Self.prefetchRetryInterval
+              }) ?? true
+        else {
+            return
+        }
+        let nextID = next.id
+        prefetchAttempts[nextID] = now
+        Task { [weak self] in
+            // Look the item up by ID on both sides of the request: it can be
+            // deleted meanwhile, and a deleted model mustn't be read.
+            guard let self, let next = self.queue.item(id: nextID) else { return }
+            await self.queue.prefetchPlaybackURL(for: next)
+            // Once the link lasts past the same horizon, forget the attempt,
+            // so a link that later expires (a long pause) is fetched again.
+            guard let refreshed = self.queue.item(id: nextID),
+                  !refreshed.playbackURLNeedsRefresh(at: horizon)
+            else {
+                return
+            }
+            self.prefetchAttempts[nextID] = nil
+        }
+    }
+
+    private static let prefetchRetryInterval: TimeInterval = 60
+
     /// Handles a player's terminal event for `item`.
     private func completeItem(_ item: QueueItem) {
         queue.markPlayed(item)
@@ -824,13 +894,19 @@ final class PlaybackCoordinator {
     /// first; a video is only chosen when no audio is left, and then it
     /// waits rather than playing.
     private func nextItem(excluding excludedID: UUID?) -> QueueItem? {
-        if !isForeground,
-           videosWaitForScreen(),
+        if videosMustWait,
            let audio = queue.firstUnplayed(excluding: excludedID, where: { !$0.source.isVideo })
         {
             return audio
         }
         return queue.firstUnplayed(excluding: excludedID)
+    }
+
+    /// Nobody can see a video: the app isn't on screen and no Picture in
+    /// Picture window is showing one, and the user saves videos for the
+    /// screen.
+    private var videosMustWait: Bool {
+        !isForeground && !isPictureInPictureActive && videosWaitForScreen()
     }
 
     private func finishQueue(notice finalNotice: String = "Queue finished.") {
@@ -925,7 +1001,11 @@ final class PlaybackCoordinator {
                     guard let self, self.currentItem?.source != .youtube else {
                         return
                     }
-                    self.wasPlayingBeforeInterruption = self.transportState.isPlaying
+                    let pausedByThisInterruption = self.externallyPausedAt.map {
+                        Date().timeIntervalSince($0) < 2
+                    } ?? false
+                    self.wasPlayingBeforeInterruption =
+                        self.transportState.isPlaying || pausedByThisInterruption
                     self.pause()
                 case .ended:
                     guard let self else { return }
@@ -958,6 +1038,22 @@ final class PlaybackCoordinator {
             }
         }
         notificationObservers.append(routeChange)
+
+        for (name, isActive) in [
+            (Notification.Name.pictureInPictureDidStart, true),
+            (Notification.Name.pictureInPictureDidStop, false),
+        ] {
+            let observer = NotificationCenter.default.addObserver(
+                forName: name,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    self?.isPictureInPictureActive = isActive
+                }
+            }
+            notificationObservers.append(observer)
+        }
     }
 
     private func configureRemoteCommands() {

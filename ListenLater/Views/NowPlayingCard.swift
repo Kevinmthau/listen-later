@@ -8,11 +8,13 @@ struct NowPlayingCard: View {
     let queue: QueueStore
     let isCompact: Bool
     let onExpand: () -> Void
-    let onMinimize: () -> Void
+    /// Nil where there's room for the full card, e.g. iPad's side column.
+    let onMinimize: (() -> Void)?
 
     @Environment(\.openURL) private var openURL
     @State private var scrubPosition: TimeInterval = 0
     @State private var isScrubbing = false
+    @State private var videoAspectRatio: CGFloat = 16.0 / 9.0
 
     var body: some View {
         VStack(spacing: isCompact ? 9 : 13) {
@@ -39,6 +41,13 @@ struct NowPlayingCard: View {
         }
         .onChange(of: playback.currentItemID) { _, _ in
             scrubPosition = playback.position
+            videoAspectRatio = 16.0 / 9.0
+            // The full-screen player shows the shared AVPlayer. Close it when
+            // the queue moves to audio or YouTube, which it can't show; a
+            // YouTube video would otherwise start underneath it.
+            if playback.currentItem?.source != .socialVideo {
+                FullScreenVideo.dismiss()
+            }
         }
         .onAppear {
             scrubPosition = playback.position
@@ -99,13 +108,15 @@ struct NowPlayingCard: View {
                 shareButton(for: shareURL, title: item.title)
             }
 
-            Button(action: onMinimize) {
-                Image(systemName: "chevron.up")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(width: 44, height: 44)
+            if let onMinimize {
+                Button(action: onMinimize) {
+                    Image(systemName: "chevron.up")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Minimize player")
+                .accessibilityIdentifier("minimize-player-button")
             }
-            .accessibilityLabel("Minimize player")
-            .accessibilityIdentifier("minimize-player-button")
         }
     }
 
@@ -475,17 +486,52 @@ struct NowPlayingCard: View {
         .buttonStyle(.borderedProminent)
     }
 
+    /// On iPhone a vertical reel at full width would push the controls and
+    /// the queue off a small screen, so it gets at most 30% of the screen's
+    /// height. iPad's side column has room for 360 pt.
+    private var expandedVideoMaxHeight: CGFloat {
+        guard onMinimize != nil else { return 360 }
+        return min(360, UIScreen.main.bounds.height * 0.3)
+    }
+
+    /// Sized to the video's own shape, so a vertical reel is tall and
+    /// narrow rather than a sliver in a wide black box.
     private var socialVideoSurface: some View {
-        NativeVideoPlayerView(player: playback.nativeVideoPlayer)
-            .frame(minWidth: 200)
-            .frame(height: isCompact ? 112 : 225)
+        VideoFrameLayout(
+            aspectRatio: videoAspectRatio,
+            maxHeight: isCompact ? 112 : expandedVideoMaxHeight
+        ) {
+            NativeVideoPlayerView(player: playback.nativeVideoPlayer) { size in
+                guard size.width > 0, size.height > 0 else { return }
+                videoAspectRatio = size.width / size.height
+            }
             .background(.black)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(alignment: .bottomTrailing) {
+                if !isCompact, let player = playback.nativeVideoPlayer {
+                    Button {
+                        FullScreenVideo.present(player)
+                    } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.footnote.weight(.bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 32, height: 32)
+                            .background(.black.opacity(0.45), in: Circle())
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(2)
+                    .accessibilityLabel("Watch full screen")
+                    .accessibilityIdentifier("full-screen-video-button")
+                }
+            }
             .accessibilityHint(
                 isCompact
                     ? "Use the play control above or expand the player"
                     : "Use the playback controls below to watch"
             )
+        }
     }
 
     private func youtubeSurface(_ item: QueueItem) -> some View {
@@ -494,11 +540,18 @@ struct NowPlayingCard: View {
                 ArtworkView(url: item.artworkURL, source: .youtube, size: 112)
                     .padding(.vertical, 4)
             } else {
-                YouTubePlayerView(model: playback.youtubePlayer)
-                    .frame(minWidth: 200)
-                    .frame(height: isCompact ? 200 : 225)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityHint("Official YouTube embedded player")
+                // YouTube's terms require at least 200 x 200 pt, and its
+                // player letterboxes within the frame itself.
+                VideoFrameLayout(
+                    aspectRatio: 16.0 / 9.0,
+                    maxHeight: isCompact ? 200 : 360,
+                    minHeight: 200,
+                    fillsWidth: true
+                ) {
+                    YouTubePlayerView(model: playback.youtubePlayer)
+                        .accessibilityHint("Official YouTube embedded player")
+                }
+                .frame(minWidth: 200)
             }
         }
     }

@@ -723,6 +723,90 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(harness.coordinator.currentItemID, podcast.id)
     }
 
+    func testNextSocialVideoLinkIsRefreshedBeforeItsTurn() async throws {
+        let harness = try makeHarness(providers: [RefreshingSocialVideoProvider()])
+        let podcast = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let video = appendSocialVideo(to: harness.queue, ordinal: 2)
+        video.playbackURLExpiresAt = .distantPast
+        harness.coordinator.start(podcast)
+        podcast.progressUpdatedAt = .distantPast
+
+        harness.engine.emit(.timeChanged(position: 100, duration: 300))
+        XCTAssertTrue(
+            video.playbackURLNeedsRefresh(),
+            "Nothing is fetched while the current item has minutes left."
+        )
+
+        harness.engine.emit(.timeChanged(position: 260, duration: 300))
+        let deadline = Date().addingTimeInterval(2)
+        while video.playbackURLNeedsRefresh(), Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertFalse(video.playbackURLNeedsRefresh())
+        XCTAssertEqual(video.status, .ready)
+        XCTAssertEqual(
+            video.playbackURL,
+            URL(string: "https://cdn.example.com/refreshed/2.mp4")
+        )
+        XCTAssertEqual(harness.coordinator.currentItemID, podcast.id)
+
+        // The refreshed link can expire again, e.g. during a long pause.
+        video.playbackURLExpiresAt = .distantPast
+        harness.engine.emit(.timeChanged(position: 270, duration: 300))
+        let secondDeadline = Date().addingTimeInterval(2)
+        while video.playbackURLNeedsRefresh(), Date() < secondDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertFalse(
+            video.playbackURLNeedsRefresh(),
+            "A link that expired again is fetched again."
+        )
+    }
+
+    func testPausingFromTheFullScreenPlayerIsAPauseNotAStall() throws {
+        let harness = try makeHarness()
+        let video = appendSocialVideo(to: harness.queue, ordinal: 1)
+        harness.coordinator.start(video)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+
+        harness.engine.emit(.pausedExternally)
+
+        XCTAssertEqual(harness.coordinator.transportState, .paused)
+        XCTAssertFalse(harness.coordinator.isBuffering)
+        XCTAssertFalse(harness.coordinator.isWaitingForMedia)
+
+        harness.engine.emit(.resumedExternally)
+
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+        XCTAssertEqual(harness.coordinator.currentItemID, video.id)
+    }
+
+    func testAVideoInPictureInPictureCountsAsOnScreen() throws {
+        let harness = try makeHarness()
+        let first = appendSocialVideo(to: harness.queue, ordinal: 1)
+        let second = appendSocialVideo(to: harness.queue, ordinal: 2)
+        appendPodcast(to: harness.queue, ordinal: 3, duration: 300)
+        harness.coordinator.start(first)
+        harness.coordinator.sceneWillResignActive()
+        NotificationCenter.default.post(name: .pictureInPictureDidStart, object: nil)
+        defer {
+            NotificationCenter.default.post(name: .pictureInPictureDidStop, object: nil)
+        }
+        // The observer hops to the main actor; let it run.
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+
+        harness.engine.emit(.ended)
+
+        XCTAssertEqual(
+            harness.coordinator.currentItemID,
+            second.id,
+            "The next video plays on in Picture in Picture instead of being skipped."
+        )
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+    }
+
     func testBufferingEventsDriveTheWaitingState() throws {
         let harness = try makeHarness()
         let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
@@ -995,6 +1079,30 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(harness.coordinator.transportState, .playing)
     }
 
+    func testAPauseRightAfterPlayIsNotMistakenForOutsideControl() async throws {
+        let engine = AVPlayerPodcastEngine(playbackWatchdogDelay: {
+            try await Task.sleep(for: .seconds(60))
+        })
+        var events: [PodcastPlaybackEvent] = []
+        engine.eventHandler = { _, event in events.append(event) }
+        engine.load(
+            url: URL(string: "https://192.0.2.1/podcast.mp3")!,
+            position: 0,
+            rate: 1,
+            loadID: UUID()
+        )
+
+        // Status changes reach the engine after a hop to the main actor,
+        // by which time the app has paused again.
+        engine.play()
+        engine.pause()
+        try await Task.sleep(for: .milliseconds(200))
+
+        XCTAssertFalse(events.contains(.resumedExternally))
+        XCTAssertFalse(events.contains(.pausedExternally))
+        engine.tearDown()
+    }
+
     func testPodcastWatchdogFailsAPlaybackThatNeverStarts() async {
         let failure = expectation(description: "Playback watchdog failure")
         let engine = AVPlayerPodcastEngine(playbackWatchdogDelay: {})
@@ -1062,12 +1170,13 @@ private extension PlaybackCoordinatorPodcastEngineTests {
         sleepTimerDelay: @escaping @Sendable (TimeInterval) async throws -> Void = {
             try await Task.sleep(for: .seconds($0))
         },
-        videosWaitForScreen: Bool = true
+        videosWaitForScreen: Bool = true,
+        providers: [any MediaProvider] = []
     ) throws -> Harness {
         let persistence = try PersistenceController.makeContainer(inMemory: true)
         let queue = QueueStore(
             context: persistence.container.mainContext,
-            providers: ProviderRegistry(providers: [])
+            providers: ProviderRegistry(providers: providers)
         )
         let engine = FakePodcastPlaybackEngine()
         let youtubePlayer = YouTubePlayerModel()
@@ -1170,6 +1279,32 @@ private extension PlaybackCoordinatorPodcastEngineTests {
     }
 }
 
+private struct RefreshingSocialVideoProvider: MediaProvider {
+    let source = ProviderSource.socialVideo
+
+    func canResolve(_ url: URL) -> Bool {
+        SocialVideoURLParser.isSupported(url)
+    }
+
+    func resolve(_ url: URL) async throws -> ProviderResolvedItem {
+        ProviderResolvedItem(
+            originalURL: url,
+            canonicalURL: url,
+            title: "X video",
+            creatorName: "@example",
+            artworkURL: nil,
+            duration: nil,
+            publishedAt: nil,
+            source: .socialVideo,
+            playback: .remoteVideo(
+                URL(string: "https://cdn.example.com/refreshed/\(url.lastPathComponent).mp4")!,
+                expiresAt: Date().addingTimeInterval(600)
+            ),
+            isMadeForKids: false
+        )
+    }
+}
+
 @MainActor
 private final class FakePodcastPlaybackEngine: PodcastPlaybackEngine {
     struct Load: Equatable {
@@ -1219,8 +1354,10 @@ private final class FakePodcastPlaybackEngine: PodcastPlaybackEngine {
 
     func emit(_ event: PodcastPlaybackEvent, loadID: UUID? = nil) {
         switch event {
-        case .ended, .stalled, .failed:
+        case .ended, .stalled, .failed, .pausedExternally:
             isPlaying = false
+        case .resumedExternally:
+            isPlaying = true
         case .timeChanged, .bufferingChanged:
             break
         }
