@@ -170,6 +170,7 @@ struct NowPlayingCard: View {
             }
         } label: {
             Label("Open in YouTube", systemImage: "arrow.up.right.square")
+                .foregroundStyle(Palette.onAccent)
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
@@ -267,7 +268,7 @@ struct NowPlayingCard: View {
                         : "play.fill"
                 )
                 .font(.title2)
-                .foregroundStyle(.white)
+                .foregroundStyle(Palette.onAccent)
                 .frame(width: 58, height: 58)
                 .background(.tint, in: Circle())
             }
@@ -346,7 +347,7 @@ struct NowPlayingCard: View {
             } label: {
                 Image(systemName: "play.fill")
                     .font(.title3)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Palette.onAccent)
                     .frame(width: 52, height: 52)
                     .background(.tint, in: Circle())
             }

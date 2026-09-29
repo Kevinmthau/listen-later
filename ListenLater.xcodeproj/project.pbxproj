@@ -18,6 +18,7 @@
 		A7DCDCE79F700F3C0C25EAC9 /* AddURLView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B46C33497F8F3185E7D76FD /* AddURLView.swift */; };
 		EFF4456B5024438197BFD1AC /* NativeVideoPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8180A285052AA4A3C2F2AC39 /* NativeVideoPlayerView.swift */; };
 		830E24A4DB709DBF35A10776 /* NowPlayingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADE200C58D2E760F57CC8422 /* NowPlayingCard.swift */; };
+		9CDC5F4DE0F848DD75CF5362 /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7164E9E8FE1714232D55EA8 /* Palette.swift */; };
 		B565551274E17E81A23F9D6B /* QueueRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C91E19C5F1897397CD1C8A7 /* QueueRow.swift */; };
 		4A099957B87A9EF29908DE75 /* QueueScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C08BAADE3D4503746146AD12 /* QueueScreen.swift */; };
 		29E5A162942E9341A1C7C645 /* YouTubePlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A31066C2BFDD423CE59E88A /* YouTubePlayerView.swift */; };
@@ -79,6 +80,7 @@
 		0B46C33497F8F3185E7D76FD /* AddURLView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/AddURLView.swift"; sourceTree = "<group>"; };
 		8180A285052AA4A3C2F2AC39 /* NativeVideoPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/NativeVideoPlayerView.swift"; sourceTree = "<group>"; };
 		ADE200C58D2E760F57CC8422 /* NowPlayingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/NowPlayingCard.swift"; sourceTree = "<group>"; };
+		C7164E9E8FE1714232D55EA8 /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Palette.swift"; sourceTree = "<group>"; };
 		3C91E19C5F1897397CD1C8A7 /* QueueRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/QueueRow.swift"; sourceTree = "<group>"; };
 		C08BAADE3D4503746146AD12 /* QueueScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/QueueScreen.swift"; sourceTree = "<group>"; };
 		8A31066C2BFDD423CE59E88A /* YouTubePlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/YouTubePlayerView.swift"; sourceTree = "<group>"; };
@@ -150,6 +152,7 @@
 				0B46C33497F8F3185E7D76FD /* AddURLView.swift */,
 				8180A285052AA4A3C2F2AC39 /* NativeVideoPlayerView.swift */,
 				ADE200C58D2E760F57CC8422 /* NowPlayingCard.swift */,
+				C7164E9E8FE1714232D55EA8 /* Palette.swift */,
 				3C91E19C5F1897397CD1C8A7 /* QueueRow.swift */,
 				C08BAADE3D4503746146AD12 /* QueueScreen.swift */,
 				8A31066C2BFDD423CE59E88A /* YouTubePlayerView.swift */,
@@ -311,6 +314,7 @@
 				A7DCDCE79F700F3C0C25EAC9 /* AddURLView.swift in Sources */,
 				EFF4456B5024438197BFD1AC /* NativeVideoPlayerView.swift in Sources */,
 				830E24A4DB709DBF35A10776 /* NowPlayingCard.swift in Sources */,
+				9CDC5F4DE0F848DD75CF5362 /* Palette.swift in Sources */,
 				B565551274E17E81A23F9D6B /* QueueRow.swift in Sources */,
 				4A099957B87A9EF29908DE75 /* QueueScreen.swift in Sources */,
 				29E5A162942E9341A1C7C645 /* YouTubePlayerView.swift in Sources */,
