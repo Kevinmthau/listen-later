@@ -22,6 +22,7 @@
 		B565551274E17E81A23F9D6B /* QueueRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C91E19C5F1897397CD1C8A7 /* QueueRow.swift */; };
 		4A099957B87A9EF29908DE75 /* QueueScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C08BAADE3D4503746146AD12 /* QueueScreen.swift */; };
 		14338486FA4DDCDFBC7A91D2 /* RoutePickerButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AE35D570671290143853D0E /* RoutePickerButton.swift */; };
+		D1E567D4FD93464C729BF3E1 /* Toast.swift in Sources */ = {isa = PBXBuildFile; fileRef = A128C23C57D695CF415133E2 /* Toast.swift */; };
 		29E5A162942E9341A1C7C645 /* YouTubePlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A31066C2BFDD423CE59E88A /* YouTubePlayerView.swift */; };
 		B4F095ADD5AD6199E7D45C2F /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED5496097121F87974A51F4A /* Formatting.swift */; };
 		55B81E7B2062203D7763A385 /* MediaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE354E16BE118D90E05EBA13 /* MediaSource.swift */; };
@@ -85,6 +86,7 @@
 		3C91E19C5F1897397CD1C8A7 /* QueueRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/QueueRow.swift"; sourceTree = "<group>"; };
 		C08BAADE3D4503746146AD12 /* QueueScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/QueueScreen.swift"; sourceTree = "<group>"; };
 		1AE35D570671290143853D0E /* RoutePickerButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/RoutePickerButton.swift"; sourceTree = "<group>"; };
+		A128C23C57D695CF415133E2 /* Toast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Toast.swift"; sourceTree = "<group>"; };
 		8A31066C2BFDD423CE59E88A /* YouTubePlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/YouTubePlayerView.swift"; sourceTree = "<group>"; };
 		C0ECD60F619A829BDEFDF42D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Assets.xcassets"; sourceTree = "<group>"; };
 		364E34C4A0406BE4E77EA5E2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info.plist"; sourceTree = "<group>"; };
@@ -158,6 +160,7 @@
 				3C91E19C5F1897397CD1C8A7 /* QueueRow.swift */,
 				C08BAADE3D4503746146AD12 /* QueueScreen.swift */,
 				1AE35D570671290143853D0E /* RoutePickerButton.swift */,
+				A128C23C57D695CF415133E2 /* Toast.swift */,
 				8A31066C2BFDD423CE59E88A /* YouTubePlayerView.swift */,
 				C0ECD60F619A829BDEFDF42D /* Assets.xcassets */,
 				364E34C4A0406BE4E77EA5E2 /* Info.plist */,
@@ -321,6 +324,7 @@
 				B565551274E17E81A23F9D6B /* QueueRow.swift in Sources */,
 				4A099957B87A9EF29908DE75 /* QueueScreen.swift in Sources */,
 				14338486FA4DDCDFBC7A91D2 /* RoutePickerButton.swift in Sources */,
+				D1E567D4FD93464C729BF3E1 /* Toast.swift in Sources */,
 				29E5A162942E9341A1C7C645 /* YouTubePlayerView.swift in Sources */,
 				B4F095ADD5AD6199E7D45C2F /* Formatting.swift in Sources */,
 				55B81E7B2062203D7763A385 /* MediaSource.swift in Sources */,

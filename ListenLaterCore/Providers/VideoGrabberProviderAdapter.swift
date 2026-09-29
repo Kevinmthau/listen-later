@@ -110,10 +110,11 @@ struct VideoGrabberProviderAdapter: MediaProvider {
         return ProviderResolvedItem(
             originalURL: url,
             canonicalURL: SocialVideoURLParser.canonicalURL(for: url) ?? url,
-            title: "\(socialURL.platform.displayName) video",
-            creatorName: socialURL.creatorName,
-            artworkURL: nil,
-            duration: nil,
+            title: response.displayTitle
+                ?? "\(socialURL.platform.displayName) video",
+            creatorName: response.displayCreator ?? socialURL.creatorName,
+            artworkURL: response.secureThumbnailURL,
+            duration: response.validDuration,
             publishedAt: nil,
             source: .socialVideo,
             playback: .remoteVideo(
@@ -166,10 +167,58 @@ private struct ResolveRequest: Encodable {
     }
 }
 
+/// `video_url` is always present. The metadata fields are optional so older
+/// resolver deployments, which return only the URL, keep working.
 private struct ResolveResponse: Decodable {
     let videoURL: String
+    let title: String?
+    let uploader: String?
+    let uploaderID: String?
+    let thumbnailURL: String?
+    let duration: Double?
 
     enum CodingKeys: String, CodingKey {
         case videoURL = "video_url"
+        case title
+        case uploader
+        case uploaderID = "uploader_id"
+        case thumbnailURL = "thumbnail_url"
+        case duration
+    }
+
+    var displayTitle: String? {
+        nonEmpty(title)
+    }
+
+    var displayCreator: String? {
+        if let uploader = nonEmpty(uploader) {
+            return uploader
+        }
+        return nonEmpty(uploaderID).map { "@\($0)" }
+    }
+
+    var secureThumbnailURL: URL? {
+        guard let thumbnailURL = nonEmpty(thumbnailURL),
+              let url = URL(string: thumbnailURL),
+              url.scheme?.lowercased() == "https",
+              ProviderURLSupport.isHTTPURL(url)
+        else {
+            return nil
+        }
+        return url
+    }
+
+    var validDuration: TimeInterval? {
+        guard let duration, duration.isFinite, duration > 0 else { return nil }
+        return duration
+    }
+
+    private func nonEmpty(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty
+        else {
+            return nil
+        }
+        return trimmed
     }
 }

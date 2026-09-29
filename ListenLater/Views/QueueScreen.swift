@@ -13,6 +13,7 @@ struct QueueScreen: View {
     @State private var editMode: EditMode = .inactive
     @State private var presentedSheet: SheetDestination?
     @State private var isPlayerCompact = false
+    @State private var toast: Toast?
 
     var body: some View {
         NavigationStack {
@@ -31,6 +32,19 @@ struct QueueScreen: View {
                 Divider()
 
                 queueList
+            }
+            .overlay(alignment: .bottom) {
+                if let toast {
+                    ToastView(toast: toast, dismiss: dismissToast)
+                        .padding(.bottom, 8)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .task(id: toast?.id) {
+                guard toast != nil else { return }
+                try? await Task.sleep(for: .seconds(6))
+                guard !Task.isCancelled else { return }
+                dismissToast()
             }
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("MushRadio")
@@ -52,7 +66,7 @@ struct QueueScreen: View {
                 }
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    if upNextItems.count > 1 {
+                    if upNextItems.count > 1 || editMode.isEditing {
                         EditButton()
                             .environment(\.editMode, $editMode)
                     }
@@ -112,6 +126,13 @@ struct QueueScreen: View {
                     isPlayerCompact = false
                 }
             }
+            .onChange(of: upNextItems.count) { _, count in
+                // Reordering needs two items; don't strand the list in edit
+                // mode after its Done button disappears.
+                if count < 2, editMode.isEditing {
+                    editMode = .inactive
+                }
+            }
         }
     }
 
@@ -151,14 +172,23 @@ struct QueueScreen: View {
                 }
 
                 if !playedItems.isEmpty {
-                    Section("Played") {
+                    Section {
                         ForEach(playedItems) { item in
                             queueRow(item)
+                        }
+                    } header: {
+                        HStack {
+                            Text("Played")
+                            Spacer()
+                            Button("Clear", action: clearPlayed)
+                                .textCase(nil)
+                                .accessibilityLabel("Clear played items")
                         }
                     }
                 }
             }
             .listStyle(.plain)
+            .animation(.snappy, value: listLayout)
             .environment(\.editMode, $editMode)
             .environment(\.defaultMinListRowHeight, 74)
             .simultaneousGesture(
@@ -204,19 +234,28 @@ struct QueueScreen: View {
         model.queue.items.filter { !$0.isInPlayedSection }
     }
 
+    /// Most recently finished first.
     private var playedItems: [QueueItem] {
         model.queue.items
             .filter(\.isInPlayedSection)
             .sorted {
                 ($0.lastPlayedAt ?? $0.updatedAt)
-                    < ($1.lastPlayedAt ?? $1.updatedAt)
+                    > ($1.lastPlayedAt ?? $1.updatedAt)
             }
+    }
+
+    /// Changes when rows move, appear, disappear or change section, but not
+    /// on progress saves, so only structural changes animate.
+    private var listLayout: [String] {
+        model.queue.items.map { "\($0.id.uuidString):\($0.isInPlayedSection)" }
     }
 
     private func queueRow(_ item: QueueItem) -> some View {
         QueueRow(
             item: item,
-            isCurrent: model.playback.currentItemID == item.id
+            isCurrent: model.playback.currentItemID == item.id,
+            isPlaying: model.playback.currentItemID == item.id
+                && model.playback.transportState.isPlaying
         )
         .contentShape(Rectangle())
         .onTapGesture { select(item) }
@@ -239,10 +278,11 @@ struct QueueScreen: View {
                 .tint(.indigo)
             }
         }
+        // A full swipe deletes, which offers Undo. Marking an item played
+        // discards its resume point, so that takes a deliberate tap.
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
-                model.queue.delete(item)
-                model.playback.currentItemWasDeleted()
+                delete(item)
             } label: {
                 Label("Delete", systemImage: "trash")
             }
@@ -307,8 +347,7 @@ struct QueueScreen: View {
             }
 
             Button(role: .destructive) {
-                model.queue.delete(item)
-                model.playback.currentItemWasDeleted()
+                delete(item)
             } label: {
                 Label("Delete", systemImage: "trash")
             }
@@ -319,8 +358,51 @@ struct QueueScreen: View {
     private func select(_ item: QueueItem) {
         if item.status == .unavailable {
             Task { await model.queue.retry(item) }
+        } else if model.playback.currentItemID == item.id {
+            // Restarting would rebuffer; the playing row toggles instead.
+            model.playback.playOrPause()
         } else {
             model.playback.start(item)
+        }
+    }
+
+    private func delete(_ item: QueueItem) {
+        guard let snapshot = model.queue.delete(item) else { return }
+        model.playback.currentItemWasDeleted()
+        showToast(
+            Toast(
+                message: "Deleted “\(snapshot.title)”.",
+                actionTitle: "Undo",
+                action: { model.queue.restore([snapshot]) }
+            )
+        )
+    }
+
+    private func clearPlayed() {
+        let snapshots = model.queue.delete(playedItems)
+        guard !snapshots.isEmpty else { return }
+        model.playback.currentItemWasDeleted()
+        let count = snapshots.count
+        showToast(
+            Toast(
+                message: count == 1
+                    ? "Cleared 1 played item."
+                    : "Cleared \(count) played items.",
+                actionTitle: "Undo",
+                action: { model.queue.restore(snapshots) }
+            )
+        )
+    }
+
+    private func showToast(_ newToast: Toast) {
+        withAnimation(.snappy) {
+            toast = newToast
+        }
+    }
+
+    private func dismissToast() {
+        withAnimation(.snappy) {
+            toast = nil
         }
     }
 

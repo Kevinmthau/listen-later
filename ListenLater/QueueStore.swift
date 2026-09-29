@@ -94,7 +94,8 @@ final class QueueStore {
         case .podcast:
             placeholderTitle = "Podcast episode"
         case .socialVideo:
-            placeholderTitle = "Social video"
+            let platform = SocialVideoURLParser.parse(url)?.platform.displayName
+            placeholderTitle = "\(platform ?? "Social") video"
         case .youtube:
             placeholderTitle = "YouTube video"
         }
@@ -280,27 +281,97 @@ final class QueueStore {
         applyRanks(to: reordered)
     }
 
+    /// Puts `item` ahead of every other Up Next item. Up Next plays top to
+    /// bottom, so the item being played leads it. No-op when it already does,
+    /// so automatic advances don't rewrite ranks.
+    func moveToTopOfUpNext(_ item: QueueItem) {
+        let upNext = items.filter { !$0.isInPlayedSection }
+        guard let first = upNext.first, first.id != item.id else { return }
+        var reordered = items.filter { $0.id != item.id }
+        let insertionIndex = reordered.firstIndex { $0.id == first.id } ?? 0
+        reordered.insert(item, at: insertionIndex)
+        applyRanks(to: reordered)
+    }
+
+    /// Puts `item` after every other Up Next item, e.g. when it is skipped.
+    func moveToEndOfUpNext(_ item: QueueItem) {
+        let upNext = items.filter { !$0.isInPlayedSection }
+        guard let last = upNext.last, last.id != item.id else { return }
+        var reordered = items.filter { $0.id != item.id }
+        let lastIndex = reordered.firstIndex { $0.id == last.id }
+            ?? reordered.index(before: reordered.endIndex)
+        reordered.insert(item, at: lastIndex + 1)
+        applyRanks(to: reordered)
+    }
+
+    /// Makes `item` the next to play: first among the Up Next items other
+    /// than `currentID`. That is right after the current item while it leads
+    /// Up Next, and ahead of anything moved above it (by a drag, another
+    /// device or Undo), since playback takes the first such item.
     func moveToPlayNext(_ item: QueueItem, after currentID: UUID?) {
         guard item.id != currentID else { return }
         var reordered = items.filter { $0.id != item.id }
         let insertionIndex: Int
-        if
+        if let nextIndex = reordered.firstIndex(where: {
+            !$0.isInPlayedSection && $0.id != currentID
+        }) {
+            insertionIndex = nextIndex
+        } else if
             let currentID,
             let currentIndex = reordered.firstIndex(where: { $0.id == currentID })
         {
             insertionIndex = currentIndex + 1
         } else {
-            insertionIndex = 0
+            insertionIndex = reordered.count
         }
-        reordered.insert(item, at: min(insertionIndex, reordered.count))
+        reordered.insert(item, at: insertionIndex)
         applyRanks(to: reordered)
     }
 
-    func delete(_ item: QueueItem) {
-        evictArtworkCache(for: item)
-        context.delete(item)
-        saveAndRefresh()
-        normalizeRanks()
+    /// Deletes `item` and returns what Undo needs to recreate it. Other
+    /// items keep their ranks, so a restored item returns to its place.
+    @discardableResult
+    func delete(_ item: QueueItem) -> QueueItemSnapshot? {
+        delete([item]).first
+    }
+
+    @discardableResult
+    func delete(_ itemsToDelete: [QueueItem]) -> [QueueItemSnapshot] {
+        guard !itemsToDelete.isEmpty else { return [] }
+        let snapshots = itemsToDelete.map { $0.snapshot() }
+        for item in itemsToDelete {
+            evictArtworkCache(for: item)
+            context.delete(item)
+        }
+        guard saveAndRefresh() else { return [] }
+        return snapshots
+    }
+
+    /// Recreates deleted items with their original ranks and progress.
+    func restore(_ snapshots: [QueueItemSnapshot]) {
+        var restored: [QueueItem] = []
+        for snapshot in snapshots where item(id: snapshot.id) == nil {
+            guard let item = snapshot.makeItem() else { continue }
+            context.insert(item)
+            restored.append(item)
+        }
+        guard !restored.isEmpty, saveAndRefresh() else { return }
+        // A lookup that finished while its item was deleted was discarded,
+        // so look up restored items that are still pending. One still in
+        // flight isn't started twice, and applies to the restored item.
+        for itemID in restored.filter({ $0.status == .resolving }).map(\.id) {
+            Task { [weak self] in
+                // Look it up again: it may have been deleted again, or the
+                // original lookup may have finished first.
+                guard let self,
+                      let item = self.item(id: itemID),
+                      item.status == .resolving
+                else {
+                    return
+                }
+                await self.resolve(item)
+            }
+        }
     }
 
     func markPlayed(_ item: QueueItem) {
@@ -381,8 +452,12 @@ final class QueueStore {
         }
     }
 
-    func firstUnplayed() -> QueueItem? {
-        items.first { !$0.isInPlayedSection && $0.status != .unavailable }
+    func firstUnplayed(excluding excludedID: UUID? = nil) -> QueueItem? {
+        items.first {
+            !$0.isInPlayedSection
+                && $0.status != .unavailable
+                && $0.id != excludedID
+        }
     }
 
     func resumeCandidate() -> QueueItem? {
@@ -632,10 +707,6 @@ final class QueueStore {
 
     private func nextRank() -> Double {
         (items.last?.sortRank ?? 0) + 1_000
-    }
-
-    private func normalizeRanks() {
-        applyRanks(to: items)
     }
 
     private func applyRanks(to reordered: [QueueItem]) {

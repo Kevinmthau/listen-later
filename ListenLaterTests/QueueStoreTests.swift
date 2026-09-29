@@ -233,16 +233,35 @@ final class QueueStoreTests: XCTestCase {
             [1_000, 2_000, 3_000, 4_000]
         )
 
-        harness.store.moveToPlayNext(third, after: first.id)
+        // `fourth` now leads Up Next, as the playing item does.
+        harness.store.moveToPlayNext(third, after: fourth.id)
 
         XCTAssertEqual(
             harness.store.items.map(\.id),
-            [fourth.id, first.id, third.id, second.id]
+            [fourth.id, third.id, first.id, second.id]
         )
         XCTAssertEqual(
             harness.store.items.map(\.sortRank),
             [1_000, 2_000, 3_000, 4_000]
         )
+    }
+
+    func testPlayNextComesNextEvenWithAnItemAboveTheCurrentOne() throws {
+        let harness = try makeHarness()
+        let first = appendItem(to: harness.store, ordinal: 1)
+        let second = appendItem(to: harness.store, ordinal: 2)
+        let third = appendItem(to: harness.store, ordinal: 3)
+        let fourth = appendItem(to: harness.store, ordinal: 4)
+        // `first` is playing; the user drags `second` above it.
+        harness.store.moveUpNext(from: IndexSet(integer: 1), to: 0)
+
+        harness.store.moveToPlayNext(fourth, after: first.id)
+
+        XCTAssertEqual(
+            harness.store.items.map(\.id),
+            [fourth.id, second.id, first.id, third.id]
+        )
+        XCTAssertEqual(harness.store.firstUnplayed(excluding: first.id)?.id, fourth.id)
     }
 
     func testMoveToPlayNextWithoutCurrentMovesItemToFront() throws {
@@ -315,7 +334,138 @@ final class QueueStoreTests: XCTestCase {
 
         harness.store.delete(second)
         XCTAssertEqual(harness.store.items.map(\.id), [first.id, third.id])
-        XCTAssertEqual(harness.store.items.map(\.sortRank), [1_000, 2_000])
+        XCTAssertEqual(
+            harness.store.items.map(\.sortRank),
+            [1_000, 3_000],
+            "Deleting leaves other ranks alone so Undo can restore in place."
+        )
+    }
+
+    func testDeleteAndRestoreRecreateItemsInPlaceWithTheirProgress() throws {
+        let harness = try makeHarness()
+        let first = appendItem(to: harness.store, ordinal: 1, duration: 300)
+        let second = appendItem(to: harness.store, ordinal: 2, duration: 600)
+        let third = appendItem(to: harness.store, ordinal: 3, duration: 900)
+        harness.store.saveProgress(for: second, position: 42, force: true)
+        harness.store.markPlayed(third)
+        let secondID = second.id
+        let thirdID = third.id
+
+        let snapshots = harness.store.delete([second, third])
+        XCTAssertEqual(snapshots.map(\.id), [secondID, thirdID])
+        XCTAssertEqual(harness.store.items.map(\.id), [first.id])
+
+        harness.store.restore(snapshots)
+
+        XCTAssertEqual(harness.store.items.map(\.id), [first.id, secondID, thirdID])
+        let restoredSecond = try XCTUnwrap(harness.store.item(id: secondID))
+        XCTAssertEqual(restoredSecond.playbackPosition, 42)
+        XCTAssertEqual(restoredSecond.title, "Episode 2")
+        XCTAssertEqual(restoredSecond.status, .ready)
+        let restoredThird = try XCTUnwrap(harness.store.item(id: thirdID))
+        XCTAssertTrue(restoredThird.isPlayed)
+
+        harness.store.restore(snapshots)
+        XCTAssertEqual(
+            harness.store.items.count,
+            3,
+            "Restoring twice must not duplicate items."
+        )
+    }
+
+    func testRestoringAnItemThatWasStillResolvingLooksItUpAgain() async throws {
+        let harness = try makeHarness(
+            providers: [
+                QueueStubProvider(source: .podcast, acceptedHost: "podcasts.example")
+            ]
+        )
+        let pending = QueueItem(
+            originalURL: URL(string: "https://podcasts.example/episodes/pending")!,
+            title: "Podcast episode",
+            source: .podcast,
+            status: .resolving,
+            sortRank: 1_000
+        )
+        harness.container.mainContext.insert(pending)
+        try harness.container.mainContext.save()
+        harness.store.refresh()
+        let pendingID = pending.id
+
+        // Its lookup finished while it was deleted, so nothing is in flight.
+        let snapshots = harness.store.delete([pending])
+        harness.store.restore(snapshots)
+
+        let deadline = Date().addingTimeInterval(2)
+        while harness.store.item(id: pendingID)?.status == .resolving, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let restored = try XCTUnwrap(harness.store.item(id: pendingID))
+        XCTAssertEqual(restored.status, .ready)
+        XCTAssertEqual(restored.title, "Resolved pending")
+    }
+
+    func testMoveToTopOfUpNextIgnoresPlayedItemsAndSkipsNoOpWrites() throws {
+        let harness = try makeHarness()
+        let played = appendItem(to: harness.store, ordinal: 1)
+        let second = appendItem(to: harness.store, ordinal: 2)
+        let third = appendItem(to: harness.store, ordinal: 3)
+        harness.store.markPlayed(played)
+
+        let secondRank = second.sortRank
+        harness.store.moveToTopOfUpNext(second)
+        XCTAssertEqual(second.sortRank, secondRank, "Already first in Up Next.")
+
+        harness.store.moveToTopOfUpNext(third)
+        XCTAssertEqual(
+            harness.store.items.filter { !$0.isInPlayedSection }.map(\.id),
+            [third.id, second.id]
+        )
+    }
+
+    func testMoveToEndOfUpNextPutsItemAfterEveryUnplayedItem() throws {
+        let harness = try makeHarness()
+        let first = appendItem(to: harness.store, ordinal: 1)
+        let second = appendItem(to: harness.store, ordinal: 2)
+        let third = appendItem(to: harness.store, ordinal: 3)
+
+        harness.store.moveToEndOfUpNext(first)
+
+        XCTAssertEqual(
+            harness.store.items.map(\.id),
+            [second.id, third.id, first.id]
+        )
+    }
+
+    func testFirstUnplayedCanExcludeTheCurrentItem() throws {
+        let harness = try makeHarness()
+        let first = appendItem(to: harness.store, ordinal: 1)
+        let second = appendItem(to: harness.store, ordinal: 2)
+
+        XCTAssertEqual(harness.store.firstUnplayed()?.id, first.id)
+        XCTAssertEqual(harness.store.firstUnplayed(excluding: first.id)?.id, second.id)
+        XCTAssertEqual(harness.store.firstUnplayed(excluding: second.id)?.id, first.id)
+    }
+
+    func testSocialVideoSourceNameUsesThePlatform() {
+        let x = QueueItem(
+            originalURL: URL(string: "https://x.com/OpenAI/status/1234567890123456789")!,
+            source: .socialVideo,
+            sortRank: 1_000
+        )
+        let instagram = QueueItem(
+            originalURL: URL(string: "https://www.instagram.com/reel/DR8LMPxEoiO/")!,
+            source: .socialVideo,
+            sortRank: 2_000
+        )
+        let podcast = QueueItem(
+            originalURL: URL(string: "https://podcasts.example/episodes/1")!,
+            source: .podcast,
+            sortRank: 3_000
+        )
+
+        XCTAssertEqual(x.sourceName, "X")
+        XCTAssertEqual(instagram.sourceName, "Instagram")
+        XCTAssertEqual(podcast.sourceName, "Podcast")
     }
 
     func testSaveProgressThrottlesClampsPersistsRateWithoutMarkingPlayed() throws {

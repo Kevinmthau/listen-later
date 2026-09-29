@@ -318,11 +318,10 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(harness.coordinator.currentItemID, second.id)
     }
 
-    func testPlayNextKeepsPartialItemUnplayedAndInItsQueuePosition() throws {
+    func testPlayNextKeepsPartialItemUnplayedAndMovesItToTheEndOfUpNext() throws {
         let harness = try makeHarness()
         let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
         let second = appendPodcast(to: harness.queue, ordinal: 2, duration: 600)
-        let originalOrder = harness.queue.items.map(\.id)
         harness.coordinator.start(first)
         first.progressUpdatedAt = .distantPast
         harness.engine.emit(.timeChanged(position: 120, duration: 300))
@@ -332,10 +331,10 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertFalse(first.isPlayed)
         XCTAssertFalse(first.isInPlayedSection)
         XCTAssertEqual(first.playbackPosition, 120)
-        XCTAssertEqual(harness.queue.items.map(\.id), originalOrder)
         XCTAssertEqual(
             harness.queue.items.filter { !$0.isInPlayedSection }.map(\.id),
-            originalOrder
+            [second.id, first.id],
+            "Up Next lists items in the order they will play."
         )
         XCTAssertEqual(harness.coordinator.currentItemID, second.id)
         XCTAssertEqual(harness.coordinator.transportState, .playing)
@@ -505,6 +504,60 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
             videoID: "video00002"
         )
         XCTAssertEqual(delivered, [.playing, .failed(code: 100)])
+    }
+
+    func testStartingAnItemMovesItToTheTopOfUpNext() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let second = appendPodcast(to: harness.queue, ordinal: 2, duration: 300)
+        let third = appendPodcast(to: harness.queue, ordinal: 3, duration: 300)
+
+        harness.coordinator.start(third)
+
+        XCTAssertEqual(
+            harness.queue.items.map(\.id),
+            [third.id, first.id, second.id]
+        )
+
+        harness.engine.emit(.ended)
+
+        XCTAssertTrue(third.isPlayed)
+        XCTAssertEqual(
+            harness.coordinator.currentItemID,
+            first.id,
+            "After the chosen item, playback continues from the top of Up Next."
+        )
+    }
+
+    func testAutomaticAdvanceDoesNotRewriteRanks() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let second = appendPodcast(to: harness.queue, ordinal: 2, duration: 300)
+        harness.coordinator.start(first)
+        let ranks = harness.queue.items.map(\.sortRank)
+
+        harness.engine.emit(.ended)
+
+        XCTAssertEqual(harness.coordinator.currentItemID, second.id)
+        XCTAssertEqual(harness.queue.items.map(\.sortRank), ranks)
+    }
+
+    func testSkippingTwiceCyclesThroughUpNextInListOrder() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let second = appendPodcast(to: harness.queue, ordinal: 2, duration: 300)
+        let third = appendPodcast(to: harness.queue, ordinal: 3, duration: 300)
+        harness.coordinator.start(first)
+
+        harness.coordinator.playNext()
+        XCTAssertEqual(harness.coordinator.currentItemID, second.id)
+        harness.coordinator.playNext()
+        XCTAssertEqual(harness.coordinator.currentItemID, third.id)
+
+        XCTAssertEqual(
+            harness.queue.items.map(\.id),
+            [third.id, first.id, second.id]
+        )
     }
 
     func testBufferingEventsDriveTheWaitingState() throws {

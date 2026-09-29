@@ -204,6 +204,7 @@ final class PlaybackCoordinator {
         if autoplay {
             sleepTimerHoldsPlayback = false
         }
+        let isSwitchingItems = item.id != currentItemID
         saveCurrentProgress(force: true)
         let currentUsesNativePlayback =
             currentItem.map { $0.source != .youtube } ?? false
@@ -224,6 +225,10 @@ final class PlaybackCoordinator {
         pendingResolutionAutoplayItemID = nil
         if item.isPlayed {
             queue.markUnplayed(item)
+        }
+        if isSwitchingItems {
+            // Up Next plays top to bottom, so the playing item leads it.
+            queue.moveToTopOfUpNext(item)
         }
         position = item.playbackPosition
         duration = item.duration
@@ -357,6 +362,8 @@ final class PlaybackCoordinator {
             finishQueue(notice: "This item remains in Up Next.")
             return
         }
+        // A skipped item keeps its progress and waits at the end of Up Next.
+        queue.moveToEndOfUpNext(item)
         start(next)
     }
 
@@ -785,14 +792,10 @@ final class PlaybackCoordinator {
         advance(from: item)
     }
 
+    /// The playing item leads Up Next, so the next one is the first
+    /// playable item other than it.
     private func nextUnplayedItem(after item: QueueItem) -> QueueItem? {
-        if let next = queue.nextUnplayed(after: item) {
-            return next
-        }
-        guard let first = queue.firstUnplayed(), first.id != item.id else {
-            return nil
-        }
-        return first
+        queue.firstUnplayed(excluding: item.id)
     }
 
     private func finishQueue(notice finalNotice: String = "Queue finished.") {

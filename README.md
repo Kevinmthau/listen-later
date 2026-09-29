@@ -506,6 +506,9 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
 ### Queue and sync
 
 - [ ] Reorder, delete, mark played/unplayed, and move an item to Play Next.
+- [ ] Start an item from the middle of Up Next and confirm it moves to the
+  top; press Next and confirm the skipped item keeps its progress at the end.
+- [ ] Delete an item and clear Played, then Undo each.
 - [ ] Verify every item’s independent playback position.
 - [ ] Confirm queue changes and progress reach the second device.
 - [ ] Make edits on both devices close together and inspect deterministic order
