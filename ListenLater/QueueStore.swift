@@ -304,19 +304,27 @@ final class QueueStore {
         applyRanks(to: reordered)
     }
 
+    /// Makes `item` the next to play: first among the Up Next items other
+    /// than `currentID`. That is right after the current item while it leads
+    /// Up Next, and ahead of anything moved above it (by a drag, another
+    /// device or Undo), since playback takes the first such item.
     func moveToPlayNext(_ item: QueueItem, after currentID: UUID?) {
         guard item.id != currentID else { return }
         var reordered = items.filter { $0.id != item.id }
         let insertionIndex: Int
-        if
+        if let nextIndex = reordered.firstIndex(where: {
+            !$0.isInPlayedSection && $0.id != currentID
+        }) {
+            insertionIndex = nextIndex
+        } else if
             let currentID,
             let currentIndex = reordered.firstIndex(where: { $0.id == currentID })
         {
             insertionIndex = currentIndex + 1
         } else {
-            insertionIndex = 0
+            insertionIndex = reordered.count
         }
-        reordered.insert(item, at: min(insertionIndex, reordered.count))
+        reordered.insert(item, at: insertionIndex)
         applyRanks(to: reordered)
     }
 
@@ -351,9 +359,17 @@ final class QueueStore {
         // A lookup that finished while its item was deleted was discarded,
         // so look up restored items that are still pending. One still in
         // flight isn't started twice, and applies to the restored item.
-        for item in restored where item.status == .resolving {
+        for itemID in restored.filter({ $0.status == .resolving }).map(\.id) {
             Task { [weak self] in
-                await self?.resolve(item)
+                // Look it up again: it may have been deleted again, or the
+                // original lookup may have finished first.
+                guard let self,
+                      let item = self.item(id: itemID),
+                      item.status == .resolving
+                else {
+                    return
+                }
+                await self.resolve(item)
             }
         }
     }

@@ -233,16 +233,35 @@ final class QueueStoreTests: XCTestCase {
             [1_000, 2_000, 3_000, 4_000]
         )
 
-        harness.store.moveToPlayNext(third, after: first.id)
+        // `fourth` now leads Up Next, as the playing item does.
+        harness.store.moveToPlayNext(third, after: fourth.id)
 
         XCTAssertEqual(
             harness.store.items.map(\.id),
-            [fourth.id, first.id, third.id, second.id]
+            [fourth.id, third.id, first.id, second.id]
         )
         XCTAssertEqual(
             harness.store.items.map(\.sortRank),
             [1_000, 2_000, 3_000, 4_000]
         )
+    }
+
+    func testPlayNextComesNextEvenWithAnItemAboveTheCurrentOne() throws {
+        let harness = try makeHarness()
+        let first = appendItem(to: harness.store, ordinal: 1)
+        let second = appendItem(to: harness.store, ordinal: 2)
+        let third = appendItem(to: harness.store, ordinal: 3)
+        let fourth = appendItem(to: harness.store, ordinal: 4)
+        // `first` is playing; the user drags `second` above it.
+        harness.store.moveUpNext(from: IndexSet(integer: 1), to: 0)
+
+        harness.store.moveToPlayNext(fourth, after: first.id)
+
+        XCTAssertEqual(
+            harness.store.items.map(\.id),
+            [fourth.id, second.id, first.id, third.id]
+        )
+        XCTAssertEqual(harness.store.firstUnplayed(excluding: first.id)?.id, fourth.id)
     }
 
     func testMoveToPlayNextWithoutCurrentMovesItemToFront() throws {

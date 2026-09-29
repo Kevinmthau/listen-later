@@ -278,8 +278,9 @@ struct QueueScreen: View {
                 .tint(.indigo)
             }
         }
-        .swipeActions(edge: .trailing) {
-            // A full swipe performs the first action, so keep it reversible.
+        // No full swipe: marking an item played discards its resume point,
+        // so it takes a deliberate tap. Delete offers Undo.
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button {
                 togglePlayed(item)
             } label: {
