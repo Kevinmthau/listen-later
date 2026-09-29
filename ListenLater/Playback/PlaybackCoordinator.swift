@@ -814,8 +814,15 @@ final class PlaybackCoordinator {
         else {
             return
         }
+        let nextID = next.id
         Task { [weak self] in
             await self?.queue.prefetchPlaybackURL(for: next)
+            // Once the link is fresh, forget the attempt, so a link that
+            // expires again during a long pause is fetched again. After a
+            // failure, remember it, so a failing resolver isn't retried on
+            // every progress update; the link is refreshed when it starts.
+            guard let self, !next.playbackURLNeedsRefresh() else { return }
+            self.prefetchedItemIDs.remove(nextID)
         }
     }
 

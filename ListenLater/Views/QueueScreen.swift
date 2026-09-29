@@ -23,14 +23,16 @@ struct QueueScreen: View {
             Group {
                 if isWideLayout {
                     // Side by side on iPad: the player keeps a phone-like
-                    // width instead of a full-width strip, and never needs
-                    // to collapse.
+                    // width instead of a full-width strip. It doesn't
+                    // collapse here; in a short window (landscape iPad mini,
+                    // Stage Manager, large text) its column scrolls instead,
+                    // so every control stays reachable.
                     HStack(spacing: 0) {
-                        VStack(spacing: 0) {
+                        ScrollView {
                             nowPlayingCard(canMinimize: false)
-                            Spacer(minLength: 0)
+                                .padding(16)
                         }
-                        .padding(16)
+                        .scrollBounceBehavior(.basedOnSize)
                         .frame(width: 440)
 
                         Divider()

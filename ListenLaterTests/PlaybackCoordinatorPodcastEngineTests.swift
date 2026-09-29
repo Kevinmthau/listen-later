@@ -750,6 +750,19 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
             URL(string: "https://cdn.example.com/refreshed/2.mp4")
         )
         XCTAssertEqual(harness.coordinator.currentItemID, podcast.id)
+
+        // The refreshed link can expire again, e.g. during a long pause.
+        video.playbackURLExpiresAt = .distantPast
+        harness.engine.emit(.timeChanged(position: 270, duration: 300))
+        let secondDeadline = Date().addingTimeInterval(2)
+        while video.playbackURLNeedsRefresh(), Date() < secondDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertFalse(
+            video.playbackURLNeedsRefresh(),
+            "A link that expired again is fetched again."
+        )
     }
 
     func testBufferingEventsDriveTheWaitingState() throws {
