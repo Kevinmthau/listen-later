@@ -306,14 +306,22 @@ struct QueueScreen: View {
     }
 
     private func queueRow(_ item: QueueItem) -> some View {
-        QueueRow(
-            item: item,
-            isCurrent: model.playback.currentItemID == item.id,
-            isPlaying: model.playback.currentItemID == item.id
-                && model.playback.transportState.isPlaying
-        )
-        .contentShape(Rectangle())
-        .onTapGesture { select(item) }
+        // A real button, so VoiceOver announces it as one.
+        Button {
+            select(item)
+        } label: {
+            QueueRow(
+                item: item,
+                isCurrent: model.playback.currentItemID == item.id,
+                isPlaying: model.playback.currentItemID == item.id
+                    && model.playback.transportState.isPlaying
+            )
+            // The whole row is the target, including its empty space.
+            .contentShape(Rectangle())
+        }
+        // A default-style Button in a List draws its label in the tint
+        // colour, which would turn every title and caption into the accent.
+        .buttonStyle(.plain)
         .listRowBackground(
             model.playback.currentItemID == item.id
                 ? Palette.playingRow
@@ -419,6 +427,9 @@ struct QueueScreen: View {
     }
 
     private func select(_ item: QueueItem) {
+        // A plain-style row stays tappable while reordering; a tap then
+        // mustn't start or pause playback.
+        guard !editMode.isEditing else { return }
         if item.status == .unavailable {
             // Show why, and let the user choose, rather than silently
             // retrying a link that may never work.
@@ -463,6 +474,7 @@ struct QueueScreen: View {
         withAnimation(.snappy) {
             toast = newToast
         }
+        AccessibilityNotification.Announcement(newToast.message).post()
     }
 
     private func dismissToast() {
