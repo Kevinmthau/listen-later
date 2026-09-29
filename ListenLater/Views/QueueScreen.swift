@@ -278,9 +278,15 @@ struct QueueScreen: View {
                 .tint(.indigo)
             }
         }
-        // No full swipe: marking an item played discards its resume point,
-        // so it takes a deliberate tap. Delete offers Undo.
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+        // A full swipe deletes, which offers Undo. Marking an item played
+        // discards its resume point, so that takes a deliberate tap.
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive) {
+                delete(item)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+
             Button {
                 togglePlayed(item)
             } label: {
@@ -292,12 +298,6 @@ struct QueueScreen: View {
                 )
             }
             .tint(item.isInPlayedSection ? .orange : .green)
-
-            Button(role: .destructive) {
-                delete(item)
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
         }
         .contextMenu {
             if model.playback.currentItemID != item.id,
