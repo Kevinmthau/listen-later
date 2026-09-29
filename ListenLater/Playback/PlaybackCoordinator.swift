@@ -599,6 +599,10 @@ final class PlaybackCoordinator {
         // device's own saves, so it writes only when another device's
         // progress disagrees; otherwise each save would prompt another.
         if transportState == .playing {
+            // The queue's length or the item's details may have changed.
+            if item.source != .youtube {
+                updateNowPlaying()
+            }
             let storedPositionDisagrees =
                 abs(item.playbackPosition - position) > Self.syncedProgressTolerance
             guard item.isPlayed || storedPositionDisagrees else { return }

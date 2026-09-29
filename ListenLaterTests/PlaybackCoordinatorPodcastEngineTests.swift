@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import MediaPlayer
 import SwiftData
 import XCTest
 @testable import ListenLater
@@ -340,6 +341,19 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(harness.engine.seekCalls.count, seekCount)
         XCTAssertEqual(harness.coordinator.position, 200)
         XCTAssertEqual(harness.coordinator.transportState, .paused)
+    }
+
+    func testNowPlayingFollowsTheQueueWhilePlaying() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        harness.coordinator.start(first)
+
+        appendPodcast(to: harness.queue, ordinal: 2, duration: 300)
+        harness.coordinator.reconcileQueueState()
+
+        let info = MPNowPlayingInfoCenter.default().nowPlayingInfo
+        XCTAssertEqual(info?[MPNowPlayingInfoPropertyPlaybackQueueCount] as? Int, 2)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
     }
 
     func testNearEndProgressDoesNotMarkPlayedOrAdvanceBeforeActivePlayerEnds() throws {
