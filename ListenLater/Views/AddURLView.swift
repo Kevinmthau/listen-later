@@ -25,6 +25,7 @@ struct AddURLView: View {
                         guard let text = strings.first else { return }
                         urlString = text.trimmingCharacters(in: .whitespacesAndNewlines)
                     }
+                    .tint(Palette.walnut)
                 } header: {
                     Text("Podcast or Video Link")
                 } footer: {
@@ -66,96 +67,6 @@ struct AddURLView: View {
             dismiss()
         } else {
             validationMessage = "This link couldn’t be added. Try again."
-        }
-    }
-}
-
-struct PlaybackInfoView: View {
-    let isCloudBacked: Bool
-    let persistenceNotice: String?
-    let youtubeIsConfigured: Bool
-    let videoGrabberIsConfigured: Bool
-
-    @Environment(\.dismiss) private var dismiss
-    @AppStorage(PlaybackPreferences.videosWaitForScreenKey)
-    private var videosWaitForScreen = true
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Toggle(isOn: $videosWaitForScreen) {
-                        Label("Save Videos for the Screen", systemImage: "iphone")
-                    }
-                } header: {
-                    Text("When Locked")
-                } footer: {
-                    Text(
-                        videosWaitForScreen
-                            ? "While your iPhone is locked or MushRadio is in the background, the queue plays podcasts and leaves videos in Up Next for when you can watch them."
-                            : "While your iPhone is locked, X and Instagram videos play as audio and are marked played when they end."
-                    )
-                }
-
-                Section("Playback") {
-                    Label(
-                        "Podcasts continue in the background and use lock-screen and Bluetooth controls.",
-                        systemImage: "headphones"
-                    )
-                    Label(
-                        "X and Instagram videos are resolved by your video-grabber service and play in the app.",
-                        systemImage: "play.square.stack"
-                    )
-                    Label(
-                        "YouTube videos use the official visible player and pause when this app is not on screen.",
-                        systemImage: "play.rectangle"
-                    )
-                }
-
-                Section("Status") {
-                    LabeledContent("CloudKit sync") {
-                        Label(
-                            isCloudBacked ? "Active" : "Local only",
-                            systemImage: isCloudBacked ? "checkmark.circle.fill" : "exclamationmark.circle"
-                        )
-                        .foregroundStyle(isCloudBacked ? .green : .orange)
-                    }
-                    LabeledContent("YouTube API") {
-                        Text(youtubeIsConfigured ? "Configured" : "Key required")
-                            .foregroundStyle(youtubeIsConfigured ? .green : .orange)
-                    }
-                    LabeledContent("Social video resolver") {
-                        Text(videoGrabberIsConfigured ? "Configured" : "Token required")
-                            .foregroundStyle(videoGrabberIsConfigured ? .green : .orange)
-                    }
-                    if let persistenceNotice, !isCloudBacked {
-                        Text(persistenceNotice)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("YouTube Terms & Privacy") {
-                    Text(
-                        "YouTube playback is provided by YouTube. Using it is subject to the YouTube Terms of Service, and Google’s Privacy Policy describes how Google handles data."
-                    )
-                    Link(
-                        "YouTube Terms of Service",
-                        destination: URL(string: "https://www.youtube.com/t/terms")!
-                    )
-                    Link(
-                        "Google Privacy Policy",
-                        destination: URL(string: "https://policies.google.com/privacy")!
-                    )
-                }
-            }
-            .navigationTitle("Playback & Sync")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
         }
     }
 }

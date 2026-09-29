@@ -117,8 +117,13 @@ private struct QueueRowGallery: View {
     var body: some View {
         List(rows) { row in
             QueueRow(item: row.item, isCurrent: row.isCurrent, isPlaying: row.isPlaying)
+                .listRowBackground(
+                    row.isCurrent
+                        ? Palette.playingRow
+                        : Color(uiColor: .secondarySystemGroupedBackground)
+                )
         }
-        .listStyle(.plain)
+        .listStyle(.insetGrouped)
     }
 }
 
@@ -142,6 +147,22 @@ private struct QueueRowGallery: View {
 
 #Preview("Empty") {
     QueueScreenPreview(seedQueue: false)
+}
+
+#Preview("Empty · Dark, largest text") {
+    QueueScreenPreview(seedQueue: false)
+        .preferredColorScheme(.dark)
+        .environment(\.dynamicTypeSize, .accessibility5)
+}
+
+#Preview("Settings · Sync off") {
+    SettingsView(
+        isCloudBacked: false,
+        persistenceNotice: "CloudKit: The operation couldn’t be completed.",
+        youtubeIsConfigured: true,
+        videoGrabberIsConfigured: false,
+        lastFailure: "This page doesn’t link to a podcast feed, so MushRadio can’t find the episode."
+    )
 }
 
 #Preview("Rows") {

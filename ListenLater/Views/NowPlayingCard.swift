@@ -30,10 +30,10 @@ struct NowPlayingCard: View {
             }
         }
         .padding(isCompact ? 12 : 16)
+        // The same flat surface as the queue's sections below it.
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color(uiColor: .secondarySystemGroupedBackground))
-                .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
+            Color(uiColor: .secondarySystemGroupedBackground),
+            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
         )
         .onChange(of: playback.position) { _, newValue in
             if !isScrubbing {
@@ -426,27 +426,10 @@ struct NowPlayingCard: View {
             : AnyLayout(HStackLayout(spacing: 15))
         return VStack(alignment: .leading, spacing: 12) {
             layout {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.12, green: 0.25, blue: 0.33),
-                                    .indigo.opacity(0.75)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                    Image(systemName: "waveform")
-                        .font(.title.weight(.semibold))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 64, height: 64)
-                .accessibilityHidden(true)
+                WaveformTile()
 
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(hasUnplayed ? "Ready when you are" : "Nothing waiting")
+                    Text(hasUnplayed ? "Ready when you are" : "All caught up")
                         .font(.headline)
                     Text(
                         hasUnplayed
@@ -461,18 +444,21 @@ struct NowPlayingCard: View {
                     Spacer(minLength: 6)
                 }
 
-                Button {
-                    playback.playOrPause()
-                } label: {
-                    Image(systemName: "play.fill")
-                        .font(.title3)
-                        .foregroundStyle(Palette.onAccent)
-                        .frame(width: 52, height: 52)
-                        .background(.tint, in: Circle())
+                // Everything is played: no button, rather than a disabled
+                // one that raises the question of how to enable it.
+                if hasUnplayed {
+                    Button {
+                        playback.playOrPause()
+                    } label: {
+                        Image(systemName: "play.fill")
+                            .font(.title3)
+                            .foregroundStyle(Palette.onAccent)
+                            .frame(width: 52, height: 52)
+                            .background(.tint, in: Circle())
+                    }
+                    .accessibilityLabel("Play queue")
+                    .accessibilityIdentifier("play-queue-button")
                 }
-                .disabled(!hasUnplayed)
-                .accessibilityLabel("Play queue")
-                .accessibilityIdentifier("play-queue-button")
             }
 
             noticeLabel
