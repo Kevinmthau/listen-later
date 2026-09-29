@@ -135,15 +135,13 @@ struct VideoGrabberProviderAdapter: MediaProvider {
         case 401:
             return .videoGrabberUnauthorized
         case 403:
-            return .itemUnavailable(
-                "This post is private, protected, or requires a video-grabber login."
-            )
+            return .itemUnavailable("This post is private or needs a login to view.")
         case 404:
-            return .itemUnavailable("No downloadable video was found in this post.")
+            return .itemUnavailable("There’s no video in this post.")
         case 429:
-            return .network("The video resolver is busy or rate limited. Try again shortly.")
+            return .network("The video service is busy. Try again in a moment.")
         case 504:
-            return .network("The video resolver timed out. Try again.")
+            return .network("The video service took too long. Try again.")
         default:
             return error
         }

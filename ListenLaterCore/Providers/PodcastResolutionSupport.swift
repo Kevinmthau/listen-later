@@ -1,13 +1,8 @@
 import Foundation
 
 struct DirectPodcastAudioResolver: Sendable {
-    private static let audioExtensions = Set([
-        "aac", "aif", "aiff", "caf", "flac", "m4a", "m4b", "mp3",
-        "mp4", "oga", "ogg", "opus", "wav"
-    ])
-
     static func isLikelyAudioURL(_ url: URL) -> Bool {
-        audioExtensions.contains(url.pathExtension.lowercased())
+        LinkClassifier.isLikelyAudioURL(url)
     }
 
     static func isAudioMIMEType(_ mimeType: String?) -> Bool {

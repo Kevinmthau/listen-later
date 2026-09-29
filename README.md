@@ -322,6 +322,12 @@ The extension display name is **Add to Queue**. Its activation rule accepts one
 web URL. It also attempts a plain-text URL when a host supplies text rather than
 `public.url`.
 
+The extension classifies the link from the URL alone (`LinkClassifier`), with
+no network access. It refuses links MushRadio can't play and says why: Spotify
+and Apple Music links, TikTok, X or Instagram pages that aren't posts, YouTube
+links without a video, and Apple Podcasts show pages. It accepts other web pages
+with a note that MushRadio will look for a podcast episode on them.
+
 After installing the containing app:
 
 1. Open MushRadio once.
@@ -470,8 +476,11 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
   and rate limiting produce understandable retryable states.
 - [ ] Share YouTube watch, short, live, mobile, and `youtu.be` URLs.
 - [ ] Confirm rapid extension completion and import when MushRadio activates.
+- [ ] Confirm the share sheet refuses a Spotify link with a reason.
 - [ ] Confirm unsupported, malformed, authenticated, deleted, and
-  non-embeddable items become unavailable and the queue continues.
+  non-embeddable items become unavailable with a readable reason in the row,
+  tapping them offers Try Again, Open Original Link and Delete, and the queue
+  continues.
 - [ ] Turn off networking during resolution, then retry from the item menu.
 
 ### Podcast playback

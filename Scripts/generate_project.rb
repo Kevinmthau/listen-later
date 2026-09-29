@@ -111,7 +111,11 @@ app_source_builds = (app_sources + core_sources).map do |path|
 end
 share_source_builds = (
   share_sources + [
+    "ListenLaterCore/Providers/ApplePodcastsLink.swift",
+    "ListenLaterCore/Providers/LinkClassifier.swift",
     "ListenLaterCore/Providers/ProviderParsingSupport.swift",
+    "ListenLaterCore/Providers/SocialVideoURLParser.swift",
+    "ListenLaterCore/Providers/YouTubeURLParser.swift",
     "ListenLaterCore/SharedQueueInbox.swift"
   ]
 ).map do |path|

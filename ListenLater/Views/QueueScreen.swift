@@ -10,10 +10,12 @@ struct QueueScreen: View {
 
     let model: AppModel
 
+    @Environment(\.openURL) private var openURL
     @State private var editMode: EditMode = .inactive
     @State private var presentedSheet: SheetDestination?
     @State private var isPlayerCompact = false
     @State private var toast: Toast?
+    @State private var unavailableItem: QueueItem?
 
     var body: some View {
         NavigationStack {
@@ -82,7 +84,7 @@ struct QueueScreen: View {
                 switch destination {
                 case .addURL:
                     AddURLView { url in
-                        await model.queue.add(url: url)
+                        model.queue.enqueue(url: url) != nil
                     }
                 case .about:
                     PlaybackInfoView(
@@ -95,30 +97,51 @@ struct QueueScreen: View {
                     )
                 }
             }
-            .alert(
-                "Queue Update",
+            .confirmationDialog(
+                unavailableItem?.title ?? "Unavailable",
                 isPresented: Binding(
-                    get: { model.queue.lastErrorMessage != nil },
-                    set: { newValue in
-                        if !newValue {
-                            model.queue.lastErrorMessage = nil
+                    get: { unavailableItem != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            unavailableItem = nil
                         }
                     }
-                )
-            ) {
-                Button("OK") { model.queue.lastErrorMessage = nil }
-            } message: {
-                Text(model.queue.lastErrorMessage ?? "")
+                ),
+                titleVisibility: .visible,
+                presenting: unavailableItem
+            ) { item in
+                Button("Try Again") {
+                    Task { await model.queue.retry(item) }
+                }
+                if let originalURL = item.originalURL {
+                    Button("Open Original Link") {
+                        openURL(originalURL)
+                    }
+                }
+                Button("Delete", role: .destructive) {
+                    delete(item)
+                }
+            } message: { item in
+                Text(item.unavailableReason ?? "MushRadio couldn’t load this item.")
             }
             .onChange(of: presentedSheet) { _, destination in
                 if destination != nil {
                     model.playback.youtubePlayerWillBeCovered()
                 }
             }
-            .onChange(of: model.queue.lastErrorMessage) { _, message in
-                if message != nil {
+            .onChange(of: unavailableItem?.id) { _, itemID in
+                if itemID != nil {
                     model.playback.youtubePlayerWillBeCovered()
                 }
+            }
+            .onChange(of: model.queue.userMessage, initial: true) { _, message in
+                // Problems are toasts: they don't cover the player or
+                // demand a tap, so YouTube keeps playing. `initial` shows
+                // one reported before this screen appeared, such as a
+                // failure to load the queue.
+                guard let message else { return }
+                model.queue.userMessage = nil
+                showToast(Toast(message: message.text))
             }
             .onChange(of: model.playback.currentItemID) { _, newValue in
                 guard newValue == nil else { return }
@@ -327,7 +350,15 @@ struct QueueScreen: View {
                 Button {
                     Task { await model.queue.retry(item) }
                 } label: {
-                    Label("Retry", systemImage: "arrow.clockwise")
+                    Label("Try Again", systemImage: "arrow.clockwise")
+                }
+            }
+
+            if let originalURL = item.originalURL {
+                Button {
+                    openURL(originalURL)
+                } label: {
+                    Label("Open Original Link", systemImage: "safari")
                 }
             }
 
@@ -357,7 +388,9 @@ struct QueueScreen: View {
 
     private func select(_ item: QueueItem) {
         if item.status == .unavailable {
-            Task { await model.queue.retry(item) }
+            // Show why, and let the user choose, rather than silently
+            // retrying a link that may never work.
+            unavailableItem = item
         } else if model.playback.currentItemID == item.id {
             // Restarting would rebuffer; the playing row toggles instead.
             model.playback.playOrPause()
