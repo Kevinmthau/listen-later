@@ -3,7 +3,7 @@ import SwiftUI
 struct QueueScreen: View {
     enum SheetDestination: String, Identifiable {
         case addURL
-        case about
+        case settings
 
         var id: String { rawValue }
     }
@@ -21,7 +21,11 @@ struct QueueScreen: View {
     var body: some View {
         NavigationStack {
             Group {
-                if isWideLayout {
+                if isQueueEmpty {
+                    // One explanation instead of an idle player above an
+                    // empty list.
+                    EmptyQueueView(paste: addPastedLink)
+                } else if isWideLayout {
                     // Side by side on iPad: the player keeps a phone-like
                     // width instead of a full-width strip. It doesn't
                     // collapse here; in a short window (landscape iPad mini,
@@ -35,23 +39,21 @@ struct QueueScreen: View {
                         .scrollBounceBehavior(.basedOnSize)
                         .frame(width: 440)
 
-                        Divider()
-
                         queueList
                     }
                 } else {
+                    // The card and the list's sections are the same flat
+                    // surface on the grouped background, so no divider.
                     VStack(spacing: 0) {
                         nowPlayingCard(canMinimize: true)
                             .padding(.horizontal, 16)
                             .padding(.top, 8)
-                            .padding(.bottom, 12)
-
-                        Divider()
 
                         queueList
                     }
                 }
             }
+            .animation(.snappy, value: isQueueEmpty)
             .overlay(alignment: .bottom) {
                 if let toast {
                     ToastView(toast: toast, dismiss: dismissToast)
@@ -69,19 +71,24 @@ struct QueueScreen: View {
             .navigationTitle("MushRadio")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        Button {
-                            presentedSheet = .about
-                        } label: {
-                            Label("Playback & Sync", systemImage: "info.circle")
-                        }
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    Button {
+                        presentedSheet = .settings
                     } label: {
-                        Image(systemName: model.isCloudBacked ? "icloud" : "icloud.slash")
+                        Image(systemName: "gearshape")
                     }
-                    .accessibilityLabel(
-                        model.isCloudBacked ? "Cloud sync active" : "Cloud sync unavailable"
-                    )
+                    .accessibilityLabel("Settings")
+
+                    // Only a problem earns a place in the toolbar.
+                    if isSyncDegraded {
+                        Button {
+                            presentedSheet = .settings
+                        } label: {
+                            Image(systemName: "icloud.slash")
+                        }
+                        .accessibilityLabel("iCloud sync is off")
+                        .accessibilityHint("Opens Settings")
+                    }
                 }
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
@@ -94,7 +101,7 @@ struct QueueScreen: View {
                     } label: {
                         Image(systemName: "plus")
                     }
-                    .accessibilityLabel("Add a URL")
+                    .accessibilityLabel("Add a Link")
                 }
             }
             .sheet(item: $presentedSheet) { destination in
@@ -103,14 +110,15 @@ struct QueueScreen: View {
                     AddURLView { url in
                         model.queue.enqueue(url: url) != nil
                     }
-                case .about:
-                    PlaybackInfoView(
+                case .settings:
+                    SettingsView(
                         isCloudBacked: model.isCloudBacked,
                         persistenceNotice: model.persistenceNotice,
                         youtubeIsConfigured: !AppConfiguration.youtubeAPIKey.isEmpty,
                         videoGrabberIsConfigured:
                             AppConfiguration.videoGrabberEndpoint.scheme == "https"
-                            && !AppConfiguration.videoGrabberAPIToken.isEmpty
+                            && !AppConfiguration.videoGrabberAPIToken.isEmpty,
+                        lastFailure: model.queue.lastFailure
                     )
                 }
             }
@@ -176,70 +184,62 @@ struct QueueScreen: View {
         }
     }
 
-    @ViewBuilder
     private var queueList: some View {
-        if model.queue.items.isEmpty {
-            ContentUnavailableView {
-                Label("Your Queue Is Empty", systemImage: "text.line.first.and.arrowtriangle.forward")
-            } description: {
-                Text("Share an X video, podcast episode, Instagram video, or YouTube link and choose “Add to Queue.”")
-            } actions: {
-                Button {
-                    presentedSheet = .addURL
-                } label: {
-                    Text("Add a URL")
-                        .foregroundStyle(Palette.onAccent)
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .frame(maxHeight: .infinity)
-        } else {
-            List {
-                if !upNextItems.isEmpty {
-                    Section {
-                        ForEach(upNextItems) { item in
-                            queueRow(item)
-                        }
-                        .onMove(perform: model.queue.moveUpNext)
-                    } header: {
-                        HStack {
-                            Text("Up Next")
-                            Spacer()
-                            Text(queueSummary)
-                                .textCase(nil)
-                        }
+        List {
+            if !upNextItems.isEmpty {
+                Section {
+                    ForEach(upNextItems) { item in
+                        queueRow(item)
+                    }
+                    .onMove(perform: model.queue.moveUpNext)
+                } header: {
+                    HStack {
+                        Text("Up Next")
+                        Spacer()
+                        Text(queueSummary)
+                            .textCase(nil)
                     }
                 }
+            }
 
-                if !playedItems.isEmpty {
-                    Section {
-                        ForEach(playedItems) { item in
-                            queueRow(item)
-                        }
-                    } header: {
-                        HStack {
-                            Text("Played")
-                            Spacer()
-                            Button("Clear", action: clearPlayed)
-                                .textCase(nil)
-                                .accessibilityLabel("Clear played items")
-                        }
+            if !playedItems.isEmpty {
+                Section {
+                    ForEach(playedItems) { item in
+                        queueRow(item)
+                    }
+                } header: {
+                    HStack {
+                        Text("Played")
+                        Spacer()
+                        Button("Clear", action: clearPlayed)
+                            .textCase(nil)
+                            .accessibilityLabel("Clear played items")
                     }
                 }
             }
-            .listStyle(.plain)
-            .animation(.snappy, value: listLayout)
-            .environment(\.editMode, $editMode)
-            .environment(\.defaultMinListRowHeight, 74)
-            .simultaneousGesture(
-                playerMinimizingGesture,
-                isEnabled: !editMode.isEditing
-            )
         }
+        .listStyle(.insetGrouped)
+        .animation(.snappy, value: listLayout)
+        .environment(\.editMode, $editMode)
+        .environment(\.defaultMinListRowHeight, 74)
+        .simultaneousGesture(
+            playerMinimizingGesture,
+            isEnabled: !editMode.isEditing
+        )
     }
 
     private var isWideLayout: Bool {
         horizontalSizeClass == .regular
+    }
+
+    private var isQueueEmpty: Bool {
+        model.queue.items.isEmpty && model.playback.currentItem == nil
+    }
+
+    /// Sync fell back to a local store. In-memory stores, such as demo
+    /// mode's, have no reason to report and aren't a problem.
+    private var isSyncDegraded: Bool {
+        !model.isCloudBacked && model.persistenceNotice != nil
     }
 
     private func nowPlayingCard(canMinimize: Bool) -> some View {
@@ -468,6 +468,15 @@ struct QueueScreen: View {
                 action: { model.queue.restore(snapshots) }
             )
         )
+    }
+
+    private func addPastedLink(_ text: String) {
+        guard let url = LinkClassifier.link(fromUserText: text) else {
+            showToast(Toast(message: "The copied text isn’t a link."))
+            return
+        }
+        // A link MushRadio can't play comes back as a toast with the reason.
+        model.queue.enqueue(url: url)
     }
 
     private func showToast(_ newToast: Toast) {

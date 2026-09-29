@@ -240,24 +240,13 @@ struct ArtworkPlaceholder: View {
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: colors,
+                colors: Palette.artworkGradient(for: source),
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             Image(systemName: source.symbolName)
                 .font(.system(size: symbolSize, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.94))
-        }
-    }
-
-    private var colors: [Color] {
-        switch source {
-        case .podcast:
-            [Color(red: 0.12, green: 0.25, blue: 0.33), .indigo.opacity(0.75)]
-        case .socialVideo:
-            [.black, Color(red: 0.08, green: 0.42, blue: 0.68)]
-        case .youtube:
-            [Color(red: 0.45, green: 0.12, blue: 0.12), .red.opacity(0.75)]
         }
     }
 }

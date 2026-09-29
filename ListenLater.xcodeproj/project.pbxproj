@@ -18,6 +18,7 @@
 		6C0201BE66406D77399A2803 /* PreviewSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5DAC66B33AA145C36A1953 /* PreviewSupport.swift */; };
 		10607228758FCD15ADBBA1AB /* QueueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18E8789D968FD752ECE3DE82 /* QueueStore.swift */; };
 		A7DCDCE79F700F3C0C25EAC9 /* AddURLView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B46C33497F8F3185E7D76FD /* AddURLView.swift */; };
+		F67747DE92D6D17F5E3253B4 /* EmptyQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D2BF02C85C7B0C2C293AFDF /* EmptyQueueView.swift */; };
 		A92DDC6AA358F726DEA5319E /* FullScreenVideo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1467B4E0EE203387A4B919F7 /* FullScreenVideo.swift */; };
 		EFF4456B5024438197BFD1AC /* NativeVideoPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8180A285052AA4A3C2F2AC39 /* NativeVideoPlayerView.swift */; };
 		830E24A4DB709DBF35A10776 /* NowPlayingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADE200C58D2E760F57CC8422 /* NowPlayingCard.swift */; };
@@ -25,6 +26,7 @@
 		B565551274E17E81A23F9D6B /* QueueRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C91E19C5F1897397CD1C8A7 /* QueueRow.swift */; };
 		4A099957B87A9EF29908DE75 /* QueueScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C08BAADE3D4503746146AD12 /* QueueScreen.swift */; };
 		14338486FA4DDCDFBC7A91D2 /* RoutePickerButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AE35D570671290143853D0E /* RoutePickerButton.swift */; };
+		0BB3808776A849DE5A687C29 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76E4315C67EFDA235B9CDB88 /* SettingsView.swift */; };
 		D1E567D4FD93464C729BF3E1 /* Toast.swift in Sources */ = {isa = PBXBuildFile; fileRef = A128C23C57D695CF415133E2 /* Toast.swift */; };
 		6750E47374B4E0D28FD5A2F5 /* VideoFrameLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6479B46D1ECDD9B04893A24 /* VideoFrameLayout.swift */; };
 		29E5A162942E9341A1C7C645 /* YouTubePlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A31066C2BFDD423CE59E88A /* YouTubePlayerView.swift */; };
@@ -94,6 +96,7 @@
 		AC5DAC66B33AA145C36A1953 /* PreviewSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PreviewSupport.swift"; sourceTree = "<group>"; };
 		18E8789D968FD752ECE3DE82 /* QueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "QueueStore.swift"; sourceTree = "<group>"; };
 		0B46C33497F8F3185E7D76FD /* AddURLView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/AddURLView.swift"; sourceTree = "<group>"; };
+		5D2BF02C85C7B0C2C293AFDF /* EmptyQueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/EmptyQueueView.swift"; sourceTree = "<group>"; };
 		1467B4E0EE203387A4B919F7 /* FullScreenVideo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/FullScreenVideo.swift"; sourceTree = "<group>"; };
 		8180A285052AA4A3C2F2AC39 /* NativeVideoPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/NativeVideoPlayerView.swift"; sourceTree = "<group>"; };
 		ADE200C58D2E760F57CC8422 /* NowPlayingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/NowPlayingCard.swift"; sourceTree = "<group>"; };
@@ -101,6 +104,7 @@
 		3C91E19C5F1897397CD1C8A7 /* QueueRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/QueueRow.swift"; sourceTree = "<group>"; };
 		C08BAADE3D4503746146AD12 /* QueueScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/QueueScreen.swift"; sourceTree = "<group>"; };
 		1AE35D570671290143853D0E /* RoutePickerButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/RoutePickerButton.swift"; sourceTree = "<group>"; };
+		76E4315C67EFDA235B9CDB88 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/SettingsView.swift"; sourceTree = "<group>"; };
 		A128C23C57D695CF415133E2 /* Toast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/Toast.swift"; sourceTree = "<group>"; };
 		A6479B46D1ECDD9B04893A24 /* VideoFrameLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/VideoFrameLayout.swift"; sourceTree = "<group>"; };
 		8A31066C2BFDD423CE59E88A /* YouTubePlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views/YouTubePlayerView.swift"; sourceTree = "<group>"; };
@@ -176,6 +180,7 @@
 				AC5DAC66B33AA145C36A1953 /* PreviewSupport.swift */,
 				18E8789D968FD752ECE3DE82 /* QueueStore.swift */,
 				0B46C33497F8F3185E7D76FD /* AddURLView.swift */,
+				5D2BF02C85C7B0C2C293AFDF /* EmptyQueueView.swift */,
 				1467B4E0EE203387A4B919F7 /* FullScreenVideo.swift */,
 				8180A285052AA4A3C2F2AC39 /* NativeVideoPlayerView.swift */,
 				ADE200C58D2E760F57CC8422 /* NowPlayingCard.swift */,
@@ -183,6 +188,7 @@
 				3C91E19C5F1897397CD1C8A7 /* QueueRow.swift */,
 				C08BAADE3D4503746146AD12 /* QueueScreen.swift */,
 				1AE35D570671290143853D0E /* RoutePickerButton.swift */,
+				76E4315C67EFDA235B9CDB88 /* SettingsView.swift */,
 				A128C23C57D695CF415133E2 /* Toast.swift */,
 				A6479B46D1ECDD9B04893A24 /* VideoFrameLayout.swift */,
 				8A31066C2BFDD423CE59E88A /* YouTubePlayerView.swift */,
@@ -348,6 +354,7 @@
 				6C0201BE66406D77399A2803 /* PreviewSupport.swift in Sources */,
 				10607228758FCD15ADBBA1AB /* QueueStore.swift in Sources */,
 				A7DCDCE79F700F3C0C25EAC9 /* AddURLView.swift in Sources */,
+				F67747DE92D6D17F5E3253B4 /* EmptyQueueView.swift in Sources */,
 				A92DDC6AA358F726DEA5319E /* FullScreenVideo.swift in Sources */,
 				EFF4456B5024438197BFD1AC /* NativeVideoPlayerView.swift in Sources */,
 				830E24A4DB709DBF35A10776 /* NowPlayingCard.swift in Sources */,
@@ -355,6 +362,7 @@
 				B565551274E17E81A23F9D6B /* QueueRow.swift in Sources */,
 				4A099957B87A9EF29908DE75 /* QueueScreen.swift in Sources */,
 				14338486FA4DDCDFBC7A91D2 /* RoutePickerButton.swift in Sources */,
+				0BB3808776A849DE5A687C29 /* SettingsView.swift in Sources */,
 				D1E567D4FD93464C729BF3E1 /* Toast.swift in Sources */,
 				6750E47374B4E0D28FD5A2F5 /* VideoFrameLayout.swift in Sources */,
 				29E5A162942E9341A1C7C645 /* YouTubePlayerView.swift in Sources */,

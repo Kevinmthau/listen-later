@@ -59,6 +59,9 @@ Key implementation boundaries:
 - `QueueStore` persists queue order, item state, and playback progress. A
   CloudKit-backed SwiftData store synchronizes those values through the user’s
   private iCloud database; foreground refreshes reconcile remote changes.
+- Colours come from the icon’s walnut and brass. `Design/README.md` lists the
+  colour tokens, their contrast ratios, and how the icon’s dark and tinted
+  versions were made.
 
 ## YouTube playback and policy
 
@@ -282,8 +285,9 @@ configuration names an App Group it can’t use. When the app hosts the unit
 tests, it uses an in-memory store instead and, like demo mode, leaves the
 Share Extension inbox alone.
 That fallback keeps the app usable, but it can hide an entitlement mistake.
-Open **Playback & Sync** in the app and confirm **CloudKit sync: Active** before
-considering setup complete.
+Open **Settings** (the gear) in the app and confirm **iCloud Sync: On** before
+considering setup complete. While sync has fallen back to a local store, a
+crossed-out cloud also appears beside the gear.
 
 While the app is foregrounded, it refreshes its SwiftData queue snapshot every
 five seconds so imported CloudKit changes are reflected without requiring a
@@ -342,6 +346,9 @@ After installing the containing app:
 6. Confirm the item appears at the bottom and changes from resolving to ready or
    unavailable.
 
+An empty queue shows these steps in the app, with a **Paste** button for a link
+that’s already copied.
+
 If the extension reports that the App Group is unavailable, verify that both
 targets are signed by the same team, both profiles include the same registered
 App Group, and the extension is embedded in the containing app.
@@ -376,7 +383,7 @@ plays. By
 default, automatic advances made in the background don't start videos: the
 queue plays the next podcast and leaves videos in Up Next, and a video that is
 reached with no audio left is loaded but paused. Turning off **Save Videos for
-the Screen** in Playback & Sync lets X and Instagram videos play as audio while
+the Screen** in Settings lets X and Instagram videos play as audio while
 locked. Rows for videos that will wait show **Needs screen**.
 Do not enable or simulate background YouTube playback. See Apple’s
 [AVAudioSession guidance](https://developer.apple.com/documentation/avfaudio/avaudiosession)
@@ -470,8 +477,8 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
 
 - [ ] Install a non-demo build on two supported devices using the same iCloud
   account.
-- [ ] Confirm **CloudKit sync: Active**, **YouTube API: Configured**, and
-  **Social video resolver: Configured**.
+- [ ] In Settings, confirm **iCloud Sync: On**, and under **Diagnostics**
+  confirm **YouTube API key: Set** and **Video resolver token: Set**.
 - [ ] Confirm an iOS-restricted key succeeds and rejected-key/quota errors are
   understandable.
 - [ ] Confirm the production build contains the intended app, extension, App
@@ -538,8 +545,18 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
 - [ ] Make edits on both devices close together and inspect deterministic order
   and last-write behavior.
 - [ ] Test while signed out of iCloud and after signing back in.
-- [ ] Confirm local-only fallback is visible rather than mistaken for active
-  sync.
+- [ ] Confirm local-only fallback shows a crossed-out cloud beside the
+  Settings gear rather than being mistaken for active sync.
+
+### Look and feel
+
+- [ ] Check the Home Screen icon in light, dark, and tinted appearances, with
+  no white at its corners.
+- [ ] With an empty queue, follow the on-screen steps to add **Add to Queue** to
+  the share sheet’s favorites, and confirm **Paste** adds a copied link in
+  light and dark mode.
+- [ ] Check the walnut and brass controls, the playing row, and stand-in artwork
+  in light and dark mode.
 
 ## Metadata retention and privacy release requirements
 
