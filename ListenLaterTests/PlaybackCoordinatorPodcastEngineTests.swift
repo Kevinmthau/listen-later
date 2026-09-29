@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import SwiftData
 import XCTest
@@ -611,6 +612,47 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(harness.coordinator.notice, "Paused by the sleep timer.")
     }
 
+    func testResumingAfterTheSleepTimerClearsItsNotice() async throws {
+        let harness = try makeHarness(sleepTimerDelay: { _ in })
+        let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 600)
+        harness.coordinator.start(item)
+        harness.coordinator.setSleepTimer(minutes: 15)
+        let deadline = Date().addingTimeInterval(2)
+        while harness.coordinator.transportState != .paused, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(harness.coordinator.notice, "Paused by the sleep timer.")
+
+        harness.coordinator.play()
+
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+        XCTAssertNil(harness.coordinator.notice)
+    }
+
+    func testSleepTimerFiringDuringAnInterruptionCancelsItsResume() async throws {
+        let harness = try makeHarness(sleepTimerDelay: { _ in })
+        let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 600)
+        harness.coordinator.start(item)
+        let playsBeforeInterruption = harness.engine.playCallCount
+
+        postInterruption(.began)
+        try await waitUntil { harness.coordinator.transportState == .paused }
+
+        harness.coordinator.setSleepTimer(minutes: 15)
+        try await waitUntil { harness.coordinator.sleepTimer == .off }
+        XCTAssertEqual(harness.coordinator.notice, "Paused by the sleep timer.")
+
+        postInterruption(.ended, options: .shouldResume)
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(harness.coordinator.transportState, .paused)
+        XCTAssertEqual(
+            harness.engine.playCallCount,
+            playsBeforeInterruption,
+            "The call ending after the timer fired must not restart playback."
+        )
+    }
+
     func testCancellingTheSleepTimerKeepsPlaying() throws {
         let harness = try makeHarness()
         let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 600)
@@ -659,6 +701,31 @@ private extension PlaybackCoordinatorPodcastEngineTests {
         let engine: FakePodcastPlaybackEngine
         let youtubePlayer: YouTubePlayerModel
         let coordinator: PlaybackCoordinator
+    }
+
+    func postInterruption(
+        _ type: AVAudioSession.InterruptionType,
+        options: AVAudioSession.InterruptionOptions = []
+    ) {
+        NotificationCenter.default.post(
+            name: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            userInfo: [
+                AVAudioSessionInterruptionTypeKey: type.rawValue,
+                AVAudioSessionInterruptionOptionKey: options.rawValue,
+            ]
+        )
+    }
+
+    func waitUntil(
+        _ condition: () -> Bool,
+        timeout: TimeInterval = 2
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition(), Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(condition(), "Timed out waiting for a condition.")
     }
 
     func makeHarness(

@@ -167,6 +167,8 @@ final class PlaybackCoordinator {
                 queue.recordPlaybackStarted(for: item)
             }
             transportState = .playing
+            // A notice about why playback paused is stale once it resumes.
+            notice = nil
             updateNowPlaying()
         case .youtube:
             guard isForeground else {
@@ -379,8 +381,14 @@ final class PlaybackCoordinator {
     private func sleepTimerDidFire() {
         sleepTimerTask = nil
         sleepTimer = .off
+        // Audio paused by an interruption, such as a call, would resume when
+        // the interruption ends; the timer cancels that resume too.
+        let wouldResumeAfterInterruption = wasPlayingBeforeInterruption
+        wasPlayingBeforeInterruption = false
         guard currentItem != nil,
-              transportState.isPlaying || transportState == .loading
+              transportState.isPlaying
+                || transportState == .loading
+                || wouldResumeAfterInterruption
         else {
             return
         }
@@ -640,6 +648,7 @@ final class PlaybackCoordinator {
             queue.recordPlaybackStarted(for: item)
             isBuffering = false
             transportState = .playing
+            notice = nil
         case .buffering:
             if transportState == .playing {
                 isBuffering = true
