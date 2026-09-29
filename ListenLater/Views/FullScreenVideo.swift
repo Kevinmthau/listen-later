@@ -38,6 +38,7 @@ enum FullScreenVideo {
     static func dismiss() {
         guard let controller = presented,
               let presenter = controller.presentingViewController,
+              !controller.isBeingPresented,
               !controller.isBeingDismissed
         else {
             return

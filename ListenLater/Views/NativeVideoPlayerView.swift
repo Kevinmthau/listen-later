@@ -109,6 +109,9 @@ final class PlayerLayerView: UIView, AVPictureInPictureControllerDelegate {
         guard let pictureInPicture, pictureInPicture.isPictureInPictureActive else {
             return
         }
+        // Let go of the shared player first: it may already be playing the
+        // next item, and closing PiP can pause its player.
+        playerLayer.player = nil
         pictureInPicture.stopPictureInPicture()
         NotificationCenter.default.post(name: .pictureInPictureDidStop, object: nil)
     }
