@@ -84,8 +84,10 @@ MushRadio therefore behaves as follows:
 - Leaving the app, locking the device, or moving the player off screen pauses
   YouTube playback. The app clears Now Playing information and disables
   lock-screen/Bluetooth remote commands for YouTube.
-- If a podcast finishes while the device is locked and the next item is a
-  YouTube video, the queue waits for the app to return to the foreground.
+- If a podcast finishes while the device is locked, the queue skips over
+  videos to the next podcast and leaves the videos in Up Next (the default
+  **Save Videos for the Screen** setting). When only videos remain, it waits
+  for the app to return to the foreground.
 - Foreground auto-advance is attempted only while the player is visible.
   WebKit/YouTube may still block autoplay; the app then asks the user to tap
   Play.
@@ -364,7 +366,12 @@ an item unavailable after a 30-second startup/rebuffer watchdog expires so the
 queue can continue. AirPlay and Bluetooth A2DP are enabled.
 
 Native X/Instagram playback uses the same engine and can keep audio active when
-the app backgrounds, although the video surface is visible only in the app.
+the app backgrounds, although the video surface is visible only in the app. By
+default, automatic advances made in the background don't start videos: the
+queue plays the next podcast and leaves videos in Up Next, and a video that is
+reached with no audio left is loaded but paused. Turning off **Save Videos for
+the Screen** in Playback & Sync lets X and Instagram videos play as audio while
+locked. Rows for videos that will wait show **Needs screen**.
 Do not enable or simulate background YouTube playback. See Apple’s
 [AVAudioSession guidance](https://developer.apple.com/documentation/avfaudio/avaudiosession)
 and [background execution modes](https://developer.apple.com/documentation/xcode/configuring-background-execution-modes).
@@ -509,8 +516,10 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
   skipped.
 - [ ] Verify made-for-kids items offer **Open in YouTube**.
 - [ ] Finish a foreground YouTube item and verify foreground queue advance.
-- [ ] Finish a background podcast immediately before a YouTube item and verify
-  the app waits for foreground rather than playing YouTube invisibly.
+- [ ] Finish a background podcast immediately before a YouTube or X video with
+  another podcast after it; verify the second podcast plays and the video
+  stays in Up Next. With no podcast left, verify the app waits for the
+  foreground rather than playing the video invisibly.
 
 ### Queue and sync
 

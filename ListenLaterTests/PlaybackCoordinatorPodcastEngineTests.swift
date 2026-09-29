@@ -560,6 +560,89 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         )
     }
 
+    func testBackgroundAdvanceSkipsVideosAndLeavesThemInUpNext() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let video = appendSocialVideo(to: harness.queue, ordinal: 2)
+        let youtube = appendYouTube(to: harness.queue, ordinal: 3)
+        let second = appendPodcast(to: harness.queue, ordinal: 4, duration: 600)
+        harness.coordinator.start(first)
+        harness.coordinator.sceneWillResignActive()
+
+        harness.engine.emit(.ended)
+
+        XCTAssertEqual(harness.coordinator.currentItemID, second.id)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+        XCTAssertEqual(
+            harness.queue.items.filter { !$0.isInPlayedSection }.map(\.id),
+            [second.id, video.id, youtube.id]
+        )
+        XCTAssertFalse(video.isPlayed)
+        XCTAssertNil(video.lastPlayedAt)
+    }
+
+    func testBackgroundAdvanceLeavesAVideoReadyWhenNoAudioRemains() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let video = appendSocialVideo(to: harness.queue, ordinal: 2)
+        harness.coordinator.start(first)
+        harness.coordinator.sceneWillResignActive()
+
+        harness.engine.emit(.ended)
+
+        XCTAssertEqual(harness.coordinator.currentItemID, video.id)
+        XCTAssertEqual(harness.coordinator.transportState, .paused)
+        XCTAssertEqual(harness.engine.playCallCount, 1)
+        XCTAssertEqual(harness.engine.loads.last?.url, video.playbackURL)
+        XCTAssertEqual(
+            harness.coordinator.notice,
+            "Paused so you can watch this video."
+        )
+        XCTAssertFalse(video.isPlayed)
+    }
+
+    func testBackgroundAdvancePlaysVideosWhenTheyDontWaitForTheScreen() throws {
+        let harness = try makeHarness(videosWaitForScreen: false)
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let video = appendSocialVideo(to: harness.queue, ordinal: 2)
+        let second = appendPodcast(to: harness.queue, ordinal: 3, duration: 600)
+        harness.coordinator.start(first)
+        harness.coordinator.sceneWillResignActive()
+
+        harness.engine.emit(.ended)
+
+        XCTAssertEqual(harness.coordinator.currentItemID, video.id)
+        XCTAssertNotEqual(harness.coordinator.currentItemID, second.id)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+    }
+
+    func testRemoteNextInTheBackgroundPrefersAudio() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let video = appendSocialVideo(to: harness.queue, ordinal: 2)
+        let second = appendPodcast(to: harness.queue, ordinal: 3, duration: 600)
+        harness.coordinator.start(first)
+        harness.coordinator.sceneWillResignActive()
+
+        harness.coordinator.playNext()
+
+        XCTAssertEqual(harness.coordinator.currentItemID, second.id)
+        XCTAssertFalse(video.isPlayed)
+        XCTAssertFalse(first.isPlayed)
+    }
+
+    func testForegroundAdvanceStillPlaysVideosInOrder() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let video = appendSocialVideo(to: harness.queue, ordinal: 2)
+        harness.coordinator.start(first)
+
+        harness.engine.emit(.ended)
+
+        XCTAssertEqual(harness.coordinator.currentItemID, video.id)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+    }
+
     func testBufferingEventsDriveTheWaitingState() throws {
         let harness = try makeHarness()
         let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
@@ -898,7 +981,8 @@ private extension PlaybackCoordinatorPodcastEngineTests {
     func makeHarness(
         sleepTimerDelay: @escaping @Sendable (TimeInterval) async throws -> Void = {
             try await Task.sleep(for: .seconds($0))
-        }
+        },
+        videosWaitForScreen: Bool = true
     ) throws -> Harness {
         let persistence = try PersistenceController.makeContainer(inMemory: true)
         let queue = QueueStore(
@@ -911,7 +995,8 @@ private extension PlaybackCoordinatorPodcastEngineTests {
             queue: queue,
             podcastEngine: engine,
             youtubePlayer: youtubePlayer,
-            sleepTimerDelay: sleepTimerDelay
+            sleepTimerDelay: sleepTimerDelay,
+            videosWaitForScreen: { videosWaitForScreen }
         )
         return Harness(
             container: persistence.container,

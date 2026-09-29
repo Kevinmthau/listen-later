@@ -8,6 +8,9 @@ struct QueueRow: View {
     let isCurrent: Bool
     let isPlaying: Bool
 
+    @AppStorage(PlaybackPreferences.videosWaitForScreenKey)
+    private var videosWaitForScreen = true
+
     var body: some View {
         HStack(spacing: 12) {
             QueueThumbnail(item: item, nowPlaying: nowPlaying)
@@ -61,11 +64,13 @@ struct QueueRow: View {
             } else if item.isInPlayedSection {
                 Label("Played", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
-            } else if item.source == .youtube, item.duration > 0 {
-                Text(item.duration.queueCompactDuration)
-                    .foregroundStyle(.secondary)
-            } else if item.hasMeaningfulProgress {
+            } else if item.hasMeaningfulProgress, item.source != .youtube {
                 Text("\(item.playbackPosition.queueTimestamp) \(progressVerb) · \(item.remainingDuration.queueCompactDuration) left")
+                    .foregroundStyle(.secondary)
+            } else if needsScreen {
+                // YouTube can't play hidden, and other videos wait while the
+                // phone is locked, so say so before the queue reaches them.
+                Label(needsScreenStatus, systemImage: "iphone")
                     .foregroundStyle(.secondary)
             } else if item.duration > 0 {
                 Text(item.duration.queueCompactDuration)
@@ -77,6 +82,15 @@ struct QueueRow: View {
     private var nowPlaying: QueueThumbnail.NowPlaying? {
         guard isCurrent else { return nil }
         return isPlaying ? .playing : .paused
+    }
+
+    private var needsScreen: Bool {
+        item.source == .youtube || (item.source.isVideo && videosWaitForScreen)
+    }
+
+    private var needsScreenStatus: String {
+        guard item.duration > 0 else { return "Needs screen" }
+        return "\(item.duration.queueCompactDuration) · Needs screen"
     }
 
     private var progressVerb: String {
