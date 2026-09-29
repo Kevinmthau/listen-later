@@ -112,7 +112,6 @@ struct QueueScreen: View {
                 }
             }
         }
-        .tint(Color(red: 0.12, green: 0.25, blue: 0.33))
     }
 
     @ViewBuilder
@@ -123,8 +122,11 @@ struct QueueScreen: View {
             } description: {
                 Text("Share an X video, podcast episode, Instagram video, or YouTube link and choose “Add to Queue.”")
             } actions: {
-                Button("Add a URL") {
+                Button {
                     presentedSheet = .addURL
+                } label: {
+                    Text("Add a URL")
+                        .foregroundStyle(Palette.onAccent)
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -219,7 +221,7 @@ struct QueueScreen: View {
         .onTapGesture { select(item) }
         .listRowBackground(
             model.playback.currentItemID == item.id
-                ? Color.accentColor.opacity(0.09)
+                ? Palette.playingRow
                 : Color(uiColor: .secondarySystemGroupedBackground)
         )
         .swipeActions(edge: .leading, allowsFullSwipe: false) {

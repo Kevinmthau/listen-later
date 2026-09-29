@@ -13,7 +13,7 @@ struct QueueRow: View {
                 if isCurrent, item.source == .podcast {
                     Image(systemName: "waveform")
                         .font(.caption2.bold())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Palette.onAccent)
                         .padding(5)
                         .background(.tint, in: Circle())
                         .accessibilityHidden(true)
