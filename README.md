@@ -275,7 +275,8 @@ falls back first to an App Group local store and then to an app-sandbox store.
 A build without the App Group entitlement goes straight to the app-sandbox
 store, because SwiftData terminates the app instead of throwing when a
 configuration names an App Group it can’t use. When the app hosts the unit
-tests, it uses an in-memory store instead.
+tests, it uses an in-memory store instead and, like demo mode, leaves the
+Share Extension inbox alone.
 That fallback keeps the app usable, but it can hide an entitlement mistake.
 Open **Playback & Sync** in the app and confirm **CloudKit sync: Active** before
 considering setup complete.

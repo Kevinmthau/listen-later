@@ -27,7 +27,10 @@ struct ListenLaterApp: App {
         _model = State(
             initialValue: AppModel(
                 persistence: persistence,
-                isDemoMode: isDemoMode
+                // The test host also runs like demo mode, which never imports
+                // from the App Group inbox: on a signed build, importing into
+                // the in-memory store would consume real shared links.
+                isDemoMode: isDemoMode || isHostingUnitTests
             )
         )
     }
