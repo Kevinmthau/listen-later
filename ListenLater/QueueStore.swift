@@ -483,11 +483,15 @@ final class QueueStore {
         }
     }
 
-    func firstUnplayed(excluding excludedID: UUID? = nil) -> QueueItem? {
+    func firstUnplayed(
+        excluding excludedID: UUID? = nil,
+        where isEligible: (QueueItem) -> Bool = { _ in true }
+    ) -> QueueItem? {
         items.first {
             !$0.isInPlayedSection
                 && $0.status != .unavailable
                 && $0.id != excludedID
+                && isEligible($0)
         }
     }
 

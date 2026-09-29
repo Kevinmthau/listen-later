@@ -77,10 +77,26 @@ struct PlaybackInfoView: View {
     let videoGrabberIsConfigured: Bool
 
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(PlaybackPreferences.videosWaitForScreenKey)
+    private var videosWaitForScreen = true
 
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    Toggle(isOn: $videosWaitForScreen) {
+                        Label("Save Videos for the Screen", systemImage: "iphone")
+                    }
+                } header: {
+                    Text("When Locked")
+                } footer: {
+                    Text(
+                        videosWaitForScreen
+                            ? "While your iPhone is locked or MushRadio is in the background, the queue plays podcasts and leaves videos in Up Next for when you can watch them."
+                            : "While your iPhone is locked, X and Instagram videos play as audio and are marked played when they end."
+                    )
+                }
+
                 Section("Playback") {
                     Label(
                         "Podcasts continue in the background and use lock-screen and Bluetooth controls.",

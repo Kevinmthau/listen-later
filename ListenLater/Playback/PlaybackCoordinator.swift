@@ -45,6 +45,7 @@ final class PlaybackCoordinator {
     @ObservationIgnored private let podcastEngine: PodcastPlaybackEngine
     @ObservationIgnored private let audioSession: AVAudioSession
     @ObservationIgnored private let sleepTimerDelay: @Sendable (TimeInterval) async throws -> Void
+    @ObservationIgnored private let videosWaitForScreen: () -> Bool
     @ObservationIgnored private var sleepTimerTask: Task<Void, Never>?
     @ObservationIgnored private var preparedItemID: UUID?
     @ObservationIgnored private var pendingResolutionAutoplayItemID: UUID?
@@ -85,6 +86,9 @@ final class PlaybackCoordinator {
         audioSession: AVAudioSession? = nil,
         sleepTimerDelay: @escaping @Sendable (TimeInterval) async throws -> Void = {
             try await Task.sleep(for: .seconds($0))
+        },
+        videosWaitForScreen: @escaping () -> Bool = {
+            PlaybackPreferences.videosWaitForScreen
         }
     ) {
         let podcastEngine = podcastEngine ?? AVPlayerPodcastEngine()
@@ -94,6 +98,7 @@ final class PlaybackCoordinator {
         self.youtubePlayer = youtubePlayer
         self.audioSession = audioSession ?? .sharedInstance()
         self.sleepTimerDelay = sleepTimerDelay
+        self.videosWaitForScreen = videosWaitForScreen
 
         podcastEngine.eventHandler = { [weak self] loadID, event in
             self?.handlePodcastEvent(loadID: loadID, event: event)
@@ -142,7 +147,7 @@ final class PlaybackCoordinator {
         // Playing on purpose supersedes an interruption's pending resume.
         wasPlayingBeforeInterruption = false
         guard let item = currentItem else {
-            guard let first = queue.firstUnplayed() else {
+            guard let first = nextItem(excluding: nil) else {
                 notice = "Your queue is caught up."
                 return
             }
@@ -352,7 +357,7 @@ final class PlaybackCoordinator {
 
     func playNext() {
         guard let item = currentItem else {
-            if let first = queue.firstUnplayed() {
+            if let first = nextItem(excluding: nil) {
                 start(first)
             }
             return
@@ -426,6 +431,10 @@ final class PlaybackCoordinator {
 
     func sceneDidBecomeActive() {
         isForeground = true
+        // Catch up with the queue first, under the on-screen rules: a YouTube
+        // video that waited for the screen then loads at its synced position,
+        // and one finished or removed elsewhere meanwhile isn't loaded at all.
+        reconcileQueueState()
         if transportState == .waitingForForeground, let item = currentItem {
             startYouTube(item, autoplay: false)
             if transportState == .loading {
@@ -557,7 +566,10 @@ final class PlaybackCoordinator {
         )
         preparedItemID = item.id
         setRemoteCommandsEnabled(true)
-        if autoplay {
+        // Nobody can see a video that starts on its own in the background,
+        // so leave it ready instead of playing its audio unseen.
+        let videoMustWait = item.source.isVideo && !isForeground && videosWaitForScreen()
+        if autoplay, !videoMustWait {
             podcastEngine.play()
             isBuffering = !podcastEngine.isPlaying
             if item.source.isVideo {
@@ -567,6 +579,9 @@ final class PlaybackCoordinator {
         } else {
             isBuffering = false
             transportState = .paused
+            if autoplay {
+                notice = "Paused so you can watch this video."
+            }
         }
         updateNowPlaying()
     }
@@ -764,7 +779,13 @@ final class PlaybackCoordinator {
     /// a sleep timer holds playback, the next item is left paused and shows
     /// the timer's notice.
     private func advance(from item: QueueItem) {
-        guard let next = nextUnplayedItem(after: item) else {
+        // Nothing autoplays while the timer holds playback, so leave the
+        // immediate next item ready, video or not, instead of reaching past
+        // videos for audio and moving it ahead of them.
+        let replacement = sleepTimerHoldsPlayback
+            ? queue.firstUnplayed(excluding: item.id)
+            : nextUnplayedItem(after: item)
+        guard let next = replacement else {
             finishQueue()
             return
         }
@@ -795,7 +816,21 @@ final class PlaybackCoordinator {
     /// The playing item leads Up Next, so the next one is the first
     /// playable item other than it.
     private func nextUnplayedItem(after item: QueueItem) -> QueueItem? {
-        queue.firstUnplayed(excluding: item.id)
+        nextItem(excluding: item.id)
+    }
+
+    /// The first playable item other than `excludedID`. In the background,
+    /// when videos wait for the screen, audio further down Up Next comes
+    /// first; a video is only chosen when no audio is left, and then it
+    /// waits rather than playing.
+    private func nextItem(excluding excludedID: UUID?) -> QueueItem? {
+        if !isForeground,
+           videosWaitForScreen(),
+           let audio = queue.firstUnplayed(excluding: excludedID, where: { !$0.source.isVideo })
+        {
+            return audio
+        }
+        return queue.firstUnplayed(excluding: excludedID)
     }
 
     private func finishQueue(notice finalNotice: String = "Queue finished.") {

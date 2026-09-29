@@ -74,7 +74,8 @@ final class AppModel {
             beginQueueObservation()
         }
         queue.refresh()
-        playback.reconcileQueueState()
+        // The coordinator reconciles as it returns to the foreground, so
+        // anything that starts uses the on-screen rules, not the locked ones.
         playback.sceneDidBecomeActive()
         guard !isDemoMode else { return }
         await queue.resumePendingResolutions()
