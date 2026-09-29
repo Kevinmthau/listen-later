@@ -52,6 +52,20 @@ enum PersistenceController {
             )
         }
 
+        // SwiftData stops the process, rather than throwing, when a
+        // configuration names an App Group the build isn't entitled to. Check
+        // first so a signing mistake reaches the local fallback below.
+        guard FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: AppConfiguration.appGroupIdentifier
+        ) != nil else {
+            return Result(
+                container: try makeSandboxContainer(schema: schema),
+                isCloudBacked: false,
+                fallbackReason:
+                    "The App Group \(AppConfiguration.appGroupIdentifier) isn’t available to this build."
+            )
+        }
+
         do {
             let cloudConfiguration = ModelConfiguration(
                 "ListenLater",
@@ -86,21 +100,24 @@ enum PersistenceController {
                     fallbackReason: cloudError.localizedDescription
                 )
             } catch {
-                let sandboxConfiguration = ModelConfiguration(
-                    "ListenLaterSandbox",
-                    schema: schema,
-                    cloudKitDatabase: .none
-                )
-                let container = try ModelContainer(
-                    for: schema,
-                    configurations: [sandboxConfiguration]
-                )
                 return Result(
-                    container: container,
+                    container: try makeSandboxContainer(schema: schema),
                     isCloudBacked: false,
                     fallbackReason: "CloudKit: \(cloudError.localizedDescription) App Group: \(error.localizedDescription)"
                 )
             }
         }
+    }
+
+    private static func makeSandboxContainer(schema: Schema) throws -> ModelContainer {
+        let sandboxConfiguration = ModelConfiguration(
+            "ListenLaterSandbox",
+            schema: schema,
+            cloudKitDatabase: .none
+        )
+        return try ModelContainer(
+            for: schema,
+            configurations: [sandboxConfiguration]
+        )
     }
 }
