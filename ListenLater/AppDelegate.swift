@@ -13,7 +13,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             return .all
         }
         var controller = window?.rootViewController
-        while let presented = controller?.presentedViewController {
+        while let presented = controller?.presentedViewController,
+              !presented.isBeingDismissed {
             controller = presented
         }
         return controller is AVPlayerViewController ? .allButUpsideDown : .portrait

@@ -5,6 +5,12 @@ enum PodcastPlaybackEvent: Equatable {
     case timeChanged(position: TimeInterval, duration: TimeInterval)
     /// True while playback is wanted but media isn't flowing yet.
     case bufferingChanged(Bool)
+    /// Something other than the app paused playback: the full-screen
+    /// player, Picture in Picture, or the system.
+    case pausedExternally
+    /// Something other than the app resumed playback, e.g. the Play button
+    /// in the full-screen player or the Picture in Picture window.
+    case resumedExternally
     case ended
     case stalled(String)
     case failed(String)
@@ -244,20 +250,39 @@ final class AVPlayerPodcastEngine: PodcastPlaybackEngine {
         }
     }
 
+    /// The full-screen player and Picture in Picture drive the same AVPlayer,
+    /// so its status changes aren't all the app's own doing: a pause while
+    /// playback is wanted came from outside (a system or PiP control, or an
+    /// interruption), and playing while it isn't wanted means something
+    /// outside resumed it. Only waitingToPlayAtSpecifiedRate is buffering.
     private func timeControlStatusDidChange(
         _ status: AVPlayer.TimeControlStatus,
         loadID: UUID
     ) {
-        guard wantsPlayback, activeLoadID == loadID else {
+        guard activeLoadID == loadID else {
             return
         }
         switch status {
         case .playing:
             cancelPlaybackWatchdog()
-            eventHandler?(loadID, .bufferingChanged(false))
-        case .paused, .waitingToPlayAtSpecifiedRate:
+            if wantsPlayback {
+                eventHandler?(loadID, .bufferingChanged(false))
+            } else {
+                wantsPlayback = true
+                eventHandler?(loadID, .resumedExternally)
+            }
+        case .waitingToPlayAtSpecifiedRate:
+            if !wantsPlayback {
+                wantsPlayback = true
+                eventHandler?(loadID, .resumedExternally)
+            }
             armPlaybackWatchdog(for: loadID)
             eventHandler?(loadID, .bufferingChanged(true))
+        case .paused:
+            guard wantsPlayback else { return }
+            wantsPlayback = false
+            cancelPlaybackWatchdog()
+            eventHandler?(loadID, .pausedExternally)
         @unknown default:
             armPlaybackWatchdog(for: loadID)
         }

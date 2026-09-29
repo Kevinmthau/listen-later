@@ -42,6 +42,12 @@ struct NowPlayingCard: View {
         .onChange(of: playback.currentItemID) { _, _ in
             scrubPosition = playback.position
             videoAspectRatio = 16.0 / 9.0
+            // The full-screen player shows the shared AVPlayer. Close it when
+            // the queue moves to audio or YouTube, which it can't show; a
+            // YouTube video would otherwise start underneath it.
+            if playback.currentItem?.source != .socialVideo {
+                FullScreenVideo.dismiss()
+            }
         }
         .onAppear {
             scrubPosition = playback.position
@@ -480,12 +486,20 @@ struct NowPlayingCard: View {
         .buttonStyle(.borderedProminent)
     }
 
+    /// On iPhone a vertical reel at full width would push the controls and
+    /// the queue off a small screen, so it gets at most 30% of the screen's
+    /// height. iPad's side column has room for 360 pt.
+    private var expandedVideoMaxHeight: CGFloat {
+        guard onMinimize != nil else { return 360 }
+        return min(360, UIScreen.main.bounds.height * 0.3)
+    }
+
     /// Sized to the video's own shape, so a vertical reel is tall and
     /// narrow rather than a sliver in a wide black box.
     private var socialVideoSurface: some View {
         VideoFrameLayout(
             aspectRatio: videoAspectRatio,
-            maxHeight: isCompact ? 112 : 360
+            maxHeight: isCompact ? 112 : expandedVideoMaxHeight
         ) {
             NativeVideoPlayerView(player: playback.nativeVideoPlayer) { size in
                 guard size.width > 0, size.height > 0 else { return }

@@ -12,6 +12,7 @@ extension Notification.Name {
 @MainActor
 enum FullScreenVideo {
     private static let delegate = FullScreenVideoDelegate()
+    private static weak var presented: AVPlayerViewController?
 
     static func present(_ player: AVPlayer) {
         guard let presenter = topViewController(),
@@ -24,8 +25,30 @@ enum FullScreenVideo {
         controller.delegate = delegate
         controller.allowsPictureInPicturePlayback = true
         controller.canStartPictureInPictureAutomaticallyFromInline = true
+        // The coordinator owns Now Playing and the remote commands.
+        controller.updatesNowPlayingInfoCenter = false
         controller.modalPresentationStyle = .fullScreen
         presenter.present(controller, animated: true)
+        presented = controller
+    }
+
+    /// Closes the full-screen player, e.g. when the queue moves on to
+    /// something that isn't a native video.
+    static func dismiss() {
+        guard let controller = presented, !controller.isBeingDismissed else { return }
+        controller.dismiss(animated: true) {
+            didEnd()
+        }
+    }
+
+    /// The inline player takes the video back, and the app returns to
+    /// portrait on iPhone now that no player allows landscape.
+    fileprivate static func didEnd() {
+        NotificationCenter.default.post(name: .fullScreenVideoDidEnd, object: nil)
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        scene?.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
     }
 
     private static func topViewController() -> UIViewController? {
@@ -47,7 +70,9 @@ private final class FullScreenVideoDelegate: NSObject, AVPlayerViewControllerDel
     ) {
         _ = coordinator.animate(alongsideTransition: nil) { context in
             guard !context.isCancelled else { return }
-            NotificationCenter.default.post(name: .fullScreenVideoDidEnd, object: nil)
+            MainActor.assumeIsolated {
+                FullScreenVideo.didEnd()
+            }
         }
     }
 }

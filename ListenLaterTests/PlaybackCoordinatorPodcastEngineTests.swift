@@ -765,6 +765,48 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         )
     }
 
+    func testPausingFromTheFullScreenPlayerIsAPauseNotAStall() throws {
+        let harness = try makeHarness()
+        let video = appendSocialVideo(to: harness.queue, ordinal: 1)
+        harness.coordinator.start(video)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+
+        harness.engine.emit(.pausedExternally)
+
+        XCTAssertEqual(harness.coordinator.transportState, .paused)
+        XCTAssertFalse(harness.coordinator.isBuffering)
+        XCTAssertFalse(harness.coordinator.isWaitingForMedia)
+
+        harness.engine.emit(.resumedExternally)
+
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+        XCTAssertEqual(harness.coordinator.currentItemID, video.id)
+    }
+
+    func testAVideoInPictureInPictureCountsAsOnScreen() throws {
+        let harness = try makeHarness()
+        let first = appendSocialVideo(to: harness.queue, ordinal: 1)
+        let second = appendSocialVideo(to: harness.queue, ordinal: 2)
+        appendPodcast(to: harness.queue, ordinal: 3, duration: 300)
+        harness.coordinator.start(first)
+        harness.coordinator.sceneWillResignActive()
+        NotificationCenter.default.post(name: .pictureInPictureDidStart, object: nil)
+        defer {
+            NotificationCenter.default.post(name: .pictureInPictureDidStop, object: nil)
+        }
+        // The observer hops to the main actor; let it run.
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+
+        harness.engine.emit(.ended)
+
+        XCTAssertEqual(
+            harness.coordinator.currentItemID,
+            second.id,
+            "The next video plays on in Picture in Picture instead of being skipped."
+        )
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+    }
+
     func testBufferingEventsDriveTheWaitingState() throws {
         let harness = try makeHarness()
         let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
@@ -1288,8 +1330,10 @@ private final class FakePodcastPlaybackEngine: PodcastPlaybackEngine {
 
     func emit(_ event: PodcastPlaybackEvent, loadID: UUID? = nil) {
         switch event {
-        case .ended, .stalled, .failed:
+        case .ended, .stalled, .failed, .pausedExternally:
             isPlaying = false
+        case .resumedExternally:
+            isPlaying = true
         case .timeChanged, .bufferingChanged:
             break
         }

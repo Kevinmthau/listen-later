@@ -21,7 +21,13 @@ struct NativeVideoPlayerView: UIViewRepresentable {
     }
 }
 
-final class PlayerLayerView: UIView {
+extension Notification.Name {
+    /// Posted when a video starts or stops showing in Picture in Picture.
+    static let pictureInPictureDidStart = Notification.Name("PictureInPictureDidStart")
+    static let pictureInPictureDidStop = Notification.Name("PictureInPictureDidStop")
+}
+
+final class PlayerLayerView: UIView, AVPictureInPictureControllerDelegate {
     override static var layerClass: AnyClass {
         AVPlayerLayer.self
     }
@@ -75,6 +81,21 @@ final class PlayerLayerView: UIView {
         }
         pictureInPicture = AVPictureInPictureController(playerLayer: playerLayer)
         pictureInPicture?.canStartPictureInPictureAutomaticallyFromInline = true
+        pictureInPicture?.delegate = self
+    }
+
+    // A video in Picture in Picture is still on screen, which the
+    // coordinator's videos-wait-for-the-screen rule needs to know.
+    nonisolated func pictureInPictureControllerDidStartPictureInPicture(
+        _ pictureInPictureController: AVPictureInPictureController
+    ) {
+        NotificationCenter.default.post(name: .pictureInPictureDidStart, object: nil)
+    }
+
+    nonisolated func pictureInPictureControllerDidStopPictureInPicture(
+        _ pictureInPictureController: AVPictureInPictureController
+    ) {
+        NotificationCenter.default.post(name: .pictureInPictureDidStop, object: nil)
     }
 
     /// The full-screen player shares this AVPlayer; attach it here again so
