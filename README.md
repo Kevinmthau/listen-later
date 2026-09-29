@@ -427,6 +427,15 @@ key or network access:
   behavior, cross-process notifications, receipt-idempotent relaunch recovery,
   multi-receipt staging, and malformed-file quarantine.
 
+GitHub Actions runs the same suite on an iOS Simulator for every pull request
+and push to `main` (`.github/workflows/ci.yml`). The workflow also regenerates
+the Xcode project and fails if `ListenLater.xcodeproj` no longer matches
+`Scripts/generate_project.rb`, so add new source files by re-running the script:
+
+```sh
+ruby Scripts/generate_project.rb
+```
+
 The provider adapters accept an injected `URLSession` so network response tests
 run without live services. Live video-grabber, YouTube, CloudKit, Share Sheet,
 lock-screen, and Bluetooth behavior belong in the real-device checklist below.
