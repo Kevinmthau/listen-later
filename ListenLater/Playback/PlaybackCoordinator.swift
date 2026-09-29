@@ -629,16 +629,20 @@ final class PlaybackCoordinator {
 
         if preparedItemID == item.id {
             // This device's own saves come back unchanged; only seek for
-            // progress saved elsewhere.
-            guard syncedProgressChanged else { return }
+            // progress saved elsewhere. Now Playing is refreshed either way,
+            // since the queue's length or the item's duration may have changed.
             switch item.source {
             case .podcast, .socialVideo:
-                podcastEngine.seek(to: position)
-                podcastEngine.setRate(Float(playbackRate))
+                if syncedProgressChanged {
+                    podcastEngine.seek(to: position)
+                    podcastEngine.setRate(Float(playbackRate))
+                }
                 updateNowPlaying()
             case .youtube:
-                youtubePlayer.seek(to: position)
-                youtubePlayer.setPlaybackRate(playbackRate)
+                if syncedProgressChanged {
+                    youtubePlayer.seek(to: position)
+                    youtubePlayer.setPlaybackRate(playbackRate)
+                }
             }
         } else if transportState == .loading, item.status == .ready {
             transportState = .paused
