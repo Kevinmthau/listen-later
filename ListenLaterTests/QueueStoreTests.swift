@@ -354,6 +354,37 @@ final class QueueStoreTests: XCTestCase {
         )
     }
 
+    func testRestoringAnItemThatWasStillResolvingLooksItUpAgain() async throws {
+        let harness = try makeHarness(
+            providers: [
+                QueueStubProvider(source: .podcast, acceptedHost: "podcasts.example")
+            ]
+        )
+        let pending = QueueItem(
+            originalURL: URL(string: "https://podcasts.example/episodes/pending")!,
+            title: "Podcast episode",
+            source: .podcast,
+            status: .resolving,
+            sortRank: 1_000
+        )
+        harness.container.mainContext.insert(pending)
+        try harness.container.mainContext.save()
+        harness.store.refresh()
+        let pendingID = pending.id
+
+        // Its lookup finished while it was deleted, so nothing is in flight.
+        let snapshots = harness.store.delete([pending])
+        harness.store.restore(snapshots)
+
+        let deadline = Date().addingTimeInterval(2)
+        while harness.store.item(id: pendingID)?.status == .resolving, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let restored = try XCTUnwrap(harness.store.item(id: pendingID))
+        XCTAssertEqual(restored.status, .ready)
+        XCTAssertEqual(restored.title, "Resolved pending")
+    }
+
     func testMoveToTopOfUpNextIgnoresPlayedItemsAndSkipsNoOpWrites() throws {
         let harness = try makeHarness()
         let played = appendItem(to: harness.store, ordinal: 1)

@@ -341,14 +341,20 @@ final class QueueStore {
 
     /// Recreates deleted items with their original ranks and progress.
     func restore(_ snapshots: [QueueItemSnapshot]) {
-        var restoredAny = false
+        var restored: [QueueItem] = []
         for snapshot in snapshots where item(id: snapshot.id) == nil {
             guard let item = snapshot.makeItem() else { continue }
             context.insert(item)
-            restoredAny = true
+            restored.append(item)
         }
-        if restoredAny {
-            saveAndRefresh()
+        guard !restored.isEmpty, saveAndRefresh() else { return }
+        // A lookup that finished while its item was deleted was discarded,
+        // so look up restored items that are still pending. One still in
+        // flight isn't started twice, and applies to the restored item.
+        for item in restored where item.status == .resolving {
+            Task { [weak self] in
+                await self?.resolve(item)
+            }
         }
     }
 
