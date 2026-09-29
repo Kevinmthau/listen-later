@@ -1,3 +1,4 @@
+import CoreData
 import Foundation
 import Observation
 import SwiftData
@@ -11,9 +12,15 @@ final class AppModel {
     let persistenceNotice: String?
     let isDemoMode: Bool
 
+    /// How often the queue is re-read in case a change notification was
+    /// missed. Changes normally arrive through notifications.
+    static let safetyNetRefreshInterval: Duration = .seconds(30)
+
     private var hasStarted = false
     @ObservationIgnored private var metadataMaintenanceTask: Task<Void, Never>?
     @ObservationIgnored private var queueObservationTask: Task<Void, Never>?
+    @ObservationIgnored private var storeChangeObserver: NSObjectProtocol?
+    @ObservationIgnored private var storeChangeRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var inboxObservation: SharedQueueInboxObservation?
 
     init(
@@ -87,6 +94,12 @@ final class AppModel {
     func sceneWillResignActive() {
         queueObservationTask?.cancel()
         queueObservationTask = nil
+        storeChangeRefreshTask?.cancel()
+        storeChangeRefreshTask = nil
+        if let storeChangeObserver {
+            NotificationCenter.default.removeObserver(storeChangeObserver)
+            self.storeChangeObserver = nil
+        }
         playback.sceneWillResignActive()
     }
 
@@ -106,12 +119,27 @@ final class AppModel {
         }
     }
 
+    /// While the app is active, re-reads the queue when the store reports a
+    /// change, such as a CloudKit import from another device, rather than
+    /// polling it. Shares from the extension have their own notification.
     private func beginQueueObservation() {
+        if storeChangeObserver == nil {
+            storeChangeObserver = NotificationCenter.default.addObserver(
+                forName: .NSPersistentStoreRemoteChange,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.storeDidChange()
+                }
+            }
+        }
+
         guard queueObservationTask == nil else { return }
         queueObservationTask = Task { [weak self] in
             while !Task.isCancelled {
                 do {
-                    try await Task.sleep(for: .seconds(5))
+                    try await Task.sleep(for: Self.safetyNetRefreshInterval)
                 } catch {
                     return
                 }
@@ -120,6 +148,24 @@ final class AppModel {
                 await self.queue.importPendingShares()
                 self.playback.reconcileQueueState()
             }
+        }
+    }
+
+    /// Imports arrive in bursts, one notification per transaction, and this
+    /// app's own saves can post them too, so refresh at most every half
+    /// second rather than once per notification.
+    private func storeDidChange() {
+        guard storeChangeRefreshTask == nil else { return }
+        storeChangeRefreshTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(500))
+            } catch {
+                return
+            }
+            guard let self else { return }
+            self.storeChangeRefreshTask = nil
+            self.queue.refresh()
+            self.playback.reconcileQueueState()
         }
     }
 }

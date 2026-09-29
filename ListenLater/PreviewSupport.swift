@@ -30,8 +30,7 @@ private struct QueueRowGallery: View {
     private struct Row: Identifiable {
         let id = UUID()
         let item: QueueItem
-        var isCurrent = false
-        var isPlaying = false
+        var activity: PlaybackActivity?
     }
 
     @State private var container: ModelContainer
@@ -104,8 +103,8 @@ private struct QueueRowGallery: View {
 
         _container = State(initialValue: container)
         _rows = State(initialValue: [
-            Row(item: playing, isCurrent: true, isPlaying: true),
-            Row(item: paused, isCurrent: true),
+            Row(item: playing, activity: .playing),
+            Row(item: paused, activity: .paused),
             Row(item: youtube),
             Row(item: inProgress),
             Row(item: resolving),
@@ -116,9 +115,9 @@ private struct QueueRowGallery: View {
 
     var body: some View {
         List(rows) { row in
-            QueueRow(item: row.item, isCurrent: row.isCurrent, isPlaying: row.isPlaying)
+            QueueRow(item: row.item, activity: row.activity)
                 .listRowBackground(
-                    row.isCurrent
+                    row.activity != nil
                         ? Palette.playingRow
                         : Color(uiColor: .secondarySystemGroupedBackground)
                 )

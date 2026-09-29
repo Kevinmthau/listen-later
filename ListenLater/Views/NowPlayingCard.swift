@@ -75,7 +75,7 @@ struct NowPlayingCard: View {
             titleBlock(item)
         }
 
-        if playback.transportState == .requiresYouTubeApp {
+        if playback.activity == .playsInYouTubeApp {
             openInYouTubeButton(for: item)
         } else {
             progressControls(for: item)
@@ -204,7 +204,7 @@ struct NowPlayingCard: View {
                     .background(.tint, in: Circle())
             }
             .accessibilityLabel(playPauseAccessibilityLabel)
-            .accessibilityValue(playback.isWaitingForMedia ? "Loading" : "")
+            .accessibilityValue(playback.activity.isWaitingForMedia ? "Loading" : "")
             .accessibilityIdentifier("play-pause-button")
             .frame(maxWidth: .infinity)
 
@@ -366,7 +366,7 @@ struct NowPlayingCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if playback.transportState != .requiresYouTubeApp {
+            if playback.activity != .playsInYouTubeApp {
                 Button {
                     playback.playOrPause()
                 } label: {
@@ -375,7 +375,7 @@ struct NowPlayingCard: View {
                         .frame(width: 44, height: 44)
                 }
                 .accessibilityLabel(playPauseAccessibilityLabel)
-                .accessibilityValue(playback.isWaitingForMedia ? "Loading" : "")
+                .accessibilityValue(playback.activity.isWaitingForMedia ? "Loading" : "")
                 .accessibilityIdentifier("play-pause-button")
             }
 
@@ -397,7 +397,7 @@ struct NowPlayingCard: View {
             youtubeSurface(item)
         }
 
-        if playback.transportState == .requiresYouTubeApp {
+        if playback.activity == .playsInYouTubeApp {
             openInYouTubeButton(for: item)
         } else if playback.duration > 0 {
             ProgressView(
@@ -480,12 +480,12 @@ struct NowPlayingCard: View {
 
     @ViewBuilder
     private func playPauseGlyph(spinnerTint: Color?) -> some View {
-        if playback.isWaitingForMedia {
+        if playback.activity.isWaitingForMedia {
             ProgressView()
                 .tint(spinnerTint)
         } else {
             Image(
-                systemName: playback.transportState.isPlaying
+                systemName: playback.activity.pausesOnTap
                     ? "pause.fill"
                     : "play.fill"
             )
@@ -493,7 +493,7 @@ struct NowPlayingCard: View {
     }
 
     private var playPauseAccessibilityLabel: String {
-        playback.transportState.isPlaying ? "Pause" : "Play"
+        playback.activity.pausesOnTap ? "Pause" : "Play"
     }
 
     private func openInYouTubeButton(for item: QueueItem) -> some View {

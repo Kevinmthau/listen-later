@@ -312,9 +312,9 @@ struct QueueScreen: View {
         } label: {
             QueueRow(
                 item: item,
-                isCurrent: model.playback.currentItemID == item.id,
-                isPlaying: model.playback.currentItemID == item.id
-                    && model.playback.transportState.isPlaying
+                activity: model.playback.currentItemID == item.id
+                    ? model.playback.activity
+                    : nil
             )
             // The whole row is the target, including its empty space.
             .contentShape(Rectangle())

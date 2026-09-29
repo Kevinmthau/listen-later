@@ -5,8 +5,8 @@ import UIKit
 
 struct QueueRow: View {
     let item: QueueItem
-    let isCurrent: Bool
-    let isPlaying: Bool
+    /// What playback is doing, for the current item only.
+    let activity: PlaybackActivity?
 
     @AppStorage(PlaybackPreferences.videosWaitForScreenKey)
     private var videosWaitForScreen = true
@@ -79,7 +79,7 @@ struct QueueRow: View {
             .foregroundStyle(.red)
             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
         case .ready:
-            if isCurrent {
+            if activity != nil {
                 Text(nowPlayingStatus)
                     .foregroundStyle(.tint)
             } else if item.isInPlayedSection {
@@ -108,7 +108,7 @@ struct QueueRow: View {
         case .unavailable:
             return item.unavailableReason ?? "Unavailable"
         case .ready:
-            if isCurrent {
+            if activity != nil {
                 return nowPlayingStatus
             }
             if item.isInPlayedSection {
@@ -125,8 +125,8 @@ struct QueueRow: View {
     }
 
     private var nowPlaying: QueueThumbnail.NowPlaying? {
-        guard isCurrent else { return nil }
-        return isPlaying ? .playing : .paused
+        guard let activity else { return nil }
+        return activity == .playing ? .playing : .paused
     }
 
     private var needsScreen: Bool {
@@ -144,7 +144,7 @@ struct QueueRow: View {
     }
 
     private var nowPlayingStatus: String {
-        let state = isPlaying ? "Now playing" : "Paused"
+        let state = activity?.rowStatus ?? ""
         guard item.source != .youtube, item.remainingDuration > 0 else {
             return state
         }
@@ -161,8 +161,8 @@ struct QueueRow: View {
         if item.status == .unavailable {
             return "Shows why it can’t play and what you can do."
         }
-        if isCurrent {
-            return isPlaying ? "Pauses playback." : "Resumes playback."
+        if let activity {
+            return activity.pausesOnTap ? "Pauses playback." : "Resumes playback."
         }
         return "Plays it now."
     }

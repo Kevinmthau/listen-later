@@ -289,9 +289,19 @@ Open **Settings** (the gear) in the app and confirm **iCloud Sync: On** before
 considering setup complete. While sync has fallen back to a local store, a
 crossed-out cloud also appears beside the gear.
 
-While the app is foregrounded, it refreshes its SwiftData queue snapshot every
-five seconds so imported CloudKit changes are reflected without requiring a
-scene transition. CloudKit transport itself remains asynchronous.
+While the app is foregrounded, it re-reads its SwiftData queue when the store
+posts `NSPersistentStoreRemoteChange`, which CloudKit imports trigger, so
+changes from other devices appear without a scene transition. Bursts of
+notifications are coalesced to one refresh per half second, and a refresh every
+30 seconds covers any missed notification. Reconciling playback with the store
+writes only when another device's progress disagrees with this one, so this
+device's own saves don't trigger more saves. CloudKit transport itself remains
+asynchronous.
+
+Queue order is a fractional `sortRank`. A move gives only the moved item a rank
+between its neighbours, so it changes one record rather than renumbering the
+queue; the queue is renumbered only when two neighbours get closer than
+0.001.
 
 Development setup:
 
@@ -638,8 +648,9 @@ privacy policy or legal terms.
   in the App Group inbox until the next activation.
 - CloudKit sync is asynchronous rather than real-time. Simultaneous queue
   reorders or progress writes on several devices use normal SwiftData/CloudKit
-  conflict behavior rather than a collaborative CRDT; foreground queue
-  snapshots are refreshed every five seconds.
+  conflict behavior rather than a collaborative CRDT. Because a move changes
+  only the moved item's record, moves of different items on two devices
+  usually both survive; two devices moving the same item keep the later move.
 - The MVP streams media and does not download podcasts or social videos for
   offline listening.
 - There are no recommendations, discovery feeds, accounts, CarPlay UI, Apple
