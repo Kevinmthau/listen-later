@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import SwiftData
 import XCTest
@@ -506,6 +507,278 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(delivered, [.playing, .failed(code: 100)])
     }
 
+    func testBufferingEventsDriveTheWaitingState() throws {
+        let harness = try makeHarness()
+        let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+
+        harness.coordinator.start(item)
+        XCTAssertFalse(harness.coordinator.isWaitingForMedia)
+
+        harness.engine.emit(.bufferingChanged(true))
+        XCTAssertTrue(harness.coordinator.isBuffering)
+        XCTAssertTrue(harness.coordinator.isWaitingForMedia)
+
+        harness.engine.emit(.bufferingChanged(false))
+        XCTAssertFalse(harness.coordinator.isWaitingForMedia)
+
+        harness.engine.emit(.bufferingChanged(true))
+        harness.coordinator.pause()
+        XCTAssertFalse(harness.coordinator.isBuffering)
+        XCTAssertFalse(harness.coordinator.isWaitingForMedia)
+
+        harness.engine.emit(.bufferingChanged(true))
+        XCTAssertFalse(
+            harness.coordinator.isBuffering,
+            "A paused item is not waiting for media."
+        )
+    }
+
+    func testResolvingItemShowsTheWaitingState() throws {
+        let harness = try makeHarness()
+        let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        item.status = .resolving
+
+        harness.coordinator.start(item)
+
+        XCTAssertEqual(harness.coordinator.transportState, .loading)
+        XCTAssertTrue(harness.coordinator.isWaitingForMedia)
+    }
+
+    func testNextIsAvailableOnlyWhenAnotherItemCanPlay() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        harness.coordinator.start(first)
+        XCTAssertFalse(harness.coordinator.hasNextItem)
+
+        let second = appendPodcast(to: harness.queue, ordinal: 2, duration: 300)
+        XCTAssertTrue(harness.coordinator.hasNextItem)
+
+        harness.queue.markUnavailable(second, reason: "Gone")
+        XCTAssertFalse(harness.coordinator.hasNextItem)
+    }
+
+    func testSleepTimerAtEndOfItemLeavesTheNextItemPaused() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let second = appendPodcast(to: harness.queue, ordinal: 2, duration: 600)
+        harness.coordinator.start(first)
+        harness.coordinator.setSleepTimerAtEndOfItem()
+
+        harness.engine.emit(.ended)
+
+        XCTAssertTrue(first.isPlayed)
+        XCTAssertEqual(harness.coordinator.currentItemID, second.id)
+        XCTAssertEqual(harness.coordinator.transportState, .paused)
+        XCTAssertEqual(harness.engine.playCallCount, 1)
+        XCTAssertEqual(harness.engine.loads.last?.url, second.playbackURL)
+        XCTAssertEqual(harness.coordinator.sleepTimer, .off)
+        XCTAssertEqual(harness.coordinator.notice, "Paused by the sleep timer.")
+    }
+
+    func testSleepTimerHoldSurvivesAFailureOfTheNextItem() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let second = appendPodcast(to: harness.queue, ordinal: 2, duration: 300)
+        let third = appendPodcast(to: harness.queue, ordinal: 3, duration: 300)
+        harness.coordinator.start(first)
+        harness.coordinator.setSleepTimerAtEndOfItem()
+        harness.engine.emit(.ended)
+        XCTAssertEqual(harness.coordinator.currentItemID, second.id)
+
+        harness.engine.emit(.failed("The episode is gone."))
+
+        XCTAssertEqual(harness.coordinator.currentItemID, third.id)
+        XCTAssertEqual(
+            harness.coordinator.transportState,
+            .paused,
+            "A failure after the timer fired must not start playback."
+        )
+        XCTAssertEqual(harness.engine.playCallCount, 1)
+        XCTAssertEqual(harness.coordinator.notice, "Paused by the sleep timer.")
+
+        harness.coordinator.play()
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+    }
+
+    func testResumingAVideoWithAnExpiredLinkRefreshesItFirst() throws {
+        let harness = try makeHarness()
+        let video = appendSocialVideo(to: harness.queue, ordinal: 1)
+        harness.coordinator.start(video)
+        harness.coordinator.pause()
+        let plays = harness.engine.playCallCount
+        video.playbackURLExpiresAt = .distantPast
+
+        harness.coordinator.play()
+
+        XCTAssertEqual(harness.engine.playCallCount, plays)
+        XCTAssertEqual(harness.coordinator.transportState, .loading)
+        XCTAssertEqual(harness.coordinator.notice, "Refreshing the video link…")
+    }
+
+    func testPlayingAVideoThatIsAlreadyPlayingKeepsItsLink() throws {
+        let harness = try makeHarness()
+        let video = appendSocialVideo(to: harness.queue, ordinal: 1)
+        harness.coordinator.start(video)
+        // Close to expiring, but the player already has the media open.
+        video.playbackURLExpiresAt = Date().addingTimeInterval(10)
+
+        harness.coordinator.play()
+
+        XCTAssertEqual(harness.engine.loads.count, 1)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+        XCTAssertEqual(video.status, .ready)
+    }
+
+    func testAFailedLinkRefreshKeepsTheVideoToTryAgain() async throws {
+        let harness = try makeHarness()
+        let video = appendSocialVideo(to: harness.queue, ordinal: 1)
+        appendPodcast(to: harness.queue, ordinal: 2, duration: 300)
+        harness.coordinator.start(video)
+        harness.coordinator.pause()
+        video.playbackURLExpiresAt = .distantPast
+
+        // The test registry has no providers, so the refresh fails with an
+        // error about the request, not the video, as it would offline.
+        harness.coordinator.play()
+        try await waitUntil { harness.coordinator.transportState == .needsUserAction }
+
+        XCTAssertEqual(video.status, .ready)
+        XCTAssertEqual(harness.coordinator.currentItemID, video.id)
+        XCTAssertEqual(
+            harness.coordinator.notice,
+            "Couldn’t refresh the video link. Tap Play to try again."
+        )
+    }
+
+    func testSleepTimerHoldSurvivesTheHeldItemBeingFinishedElsewhere() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let second = appendPodcast(to: harness.queue, ordinal: 2, duration: 300)
+        let third = appendPodcast(to: harness.queue, ordinal: 3, duration: 300)
+        harness.coordinator.start(first)
+        harness.coordinator.setSleepTimerAtEndOfItem()
+        harness.engine.emit(.ended)
+        XCTAssertEqual(harness.coordinator.currentItemID, second.id)
+
+        harness.queue.markPlayed(second)
+        harness.coordinator.reconcileQueueState()
+
+        XCTAssertEqual(harness.coordinator.currentItemID, third.id)
+        XCTAssertEqual(harness.coordinator.transportState, .paused)
+        XCTAssertEqual(harness.engine.playCallCount, 1)
+        XCTAssertEqual(harness.coordinator.notice, "Paused by the sleep timer.")
+    }
+
+    func testTimedSleepTimerHoldsPlaybackUntilSomethingIsPlayed() async throws {
+        let harness = try makeHarness(sleepTimerDelay: { _ in })
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 600)
+        let second = appendPodcast(to: harness.queue, ordinal: 2, duration: 600)
+        harness.coordinator.start(first)
+        harness.coordinator.setSleepTimer(minutes: 15)
+        try await waitUntil { harness.coordinator.transportState == .paused }
+
+        harness.queue.markUnavailable(first, reason: "Gone")
+        harness.coordinator.reconcileQueueState()
+
+        XCTAssertEqual(harness.coordinator.currentItemID, second.id)
+        XCTAssertEqual(harness.coordinator.transportState, .paused)
+        XCTAssertEqual(harness.engine.playCallCount, 1)
+        XCTAssertEqual(harness.coordinator.notice, "Paused by the sleep timer.")
+
+        harness.coordinator.play()
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+    }
+
+    func testSleepTimerAtEndOfLastItemFinishesTheQueue() throws {
+        let harness = try makeHarness()
+        let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        harness.coordinator.start(item)
+        harness.coordinator.setSleepTimerAtEndOfItem()
+
+        harness.engine.emit(.ended)
+
+        XCTAssertTrue(item.isPlayed)
+        XCTAssertNil(harness.coordinator.currentItemID)
+        XCTAssertEqual(harness.coordinator.transportState, .idle)
+        XCTAssertEqual(harness.coordinator.sleepTimer, .off)
+        XCTAssertEqual(harness.coordinator.notice, "Queue finished.")
+    }
+
+    func testTimedSleepTimerPausesPlaybackWhenItFires() async throws {
+        let harness = try makeHarness(sleepTimerDelay: { _ in })
+        let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 600)
+        harness.coordinator.start(item)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+
+        harness.coordinator.setSleepTimer(minutes: 15)
+        guard case let .until(fireDate) = harness.coordinator.sleepTimer else {
+            return XCTFail("Expected a timed sleep timer.")
+        }
+        XCTAssertEqual(fireDate.timeIntervalSinceNow, 15 * 60, accuracy: 5)
+
+        let deadline = Date().addingTimeInterval(2)
+        while harness.coordinator.sleepTimer != .off, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(harness.coordinator.sleepTimer, .off)
+        XCTAssertEqual(harness.coordinator.transportState, .paused)
+        XCTAssertEqual(harness.coordinator.notice, "Paused by the sleep timer.")
+    }
+
+    func testResumingAfterTheSleepTimerClearsItsNotice() async throws {
+        let harness = try makeHarness(sleepTimerDelay: { _ in })
+        let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 600)
+        harness.coordinator.start(item)
+        harness.coordinator.setSleepTimer(minutes: 15)
+        let deadline = Date().addingTimeInterval(2)
+        while harness.coordinator.transportState != .paused, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(harness.coordinator.notice, "Paused by the sleep timer.")
+
+        harness.coordinator.play()
+
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+        XCTAssertNil(harness.coordinator.notice)
+    }
+
+    func testSleepTimerFiringDuringAnInterruptionCancelsItsResume() async throws {
+        let harness = try makeHarness(sleepTimerDelay: { _ in })
+        let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 600)
+        harness.coordinator.start(item)
+        let playsBeforeInterruption = harness.engine.playCallCount
+
+        postInterruption(.began)
+        try await waitUntil { harness.coordinator.transportState == .paused }
+
+        harness.coordinator.setSleepTimer(minutes: 15)
+        try await waitUntil { harness.coordinator.sleepTimer == .off }
+        XCTAssertEqual(harness.coordinator.notice, "Paused by the sleep timer.")
+
+        postInterruption(.ended, options: .shouldResume)
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(harness.coordinator.transportState, .paused)
+        XCTAssertEqual(
+            harness.engine.playCallCount,
+            playsBeforeInterruption,
+            "The call ending after the timer fired must not restart playback."
+        )
+    }
+
+    func testCancellingTheSleepTimerKeepsPlaying() throws {
+        let harness = try makeHarness()
+        let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 600)
+        harness.coordinator.start(item)
+
+        harness.coordinator.setSleepTimer(minutes: 30)
+        harness.coordinator.cancelSleepTimer()
+
+        XCTAssertEqual(harness.coordinator.sleepTimer, .off)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+    }
+
     func testPodcastWatchdogFailsAPlaybackThatNeverStarts() async {
         let failure = expectation(description: "Playback watchdog failure")
         let engine = AVPlayerPodcastEngine(playbackWatchdogDelay: {})
@@ -544,7 +817,36 @@ private extension PlaybackCoordinatorPodcastEngineTests {
         let coordinator: PlaybackCoordinator
     }
 
-    func makeHarness() throws -> Harness {
+    func postInterruption(
+        _ type: AVAudioSession.InterruptionType,
+        options: AVAudioSession.InterruptionOptions = []
+    ) {
+        NotificationCenter.default.post(
+            name: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            userInfo: [
+                AVAudioSessionInterruptionTypeKey: type.rawValue,
+                AVAudioSessionInterruptionOptionKey: options.rawValue,
+            ]
+        )
+    }
+
+    func waitUntil(
+        _ condition: () -> Bool,
+        timeout: TimeInterval = 2
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition(), Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(condition(), "Timed out waiting for a condition.")
+    }
+
+    func makeHarness(
+        sleepTimerDelay: @escaping @Sendable (TimeInterval) async throws -> Void = {
+            try await Task.sleep(for: .seconds($0))
+        }
+    ) throws -> Harness {
         let persistence = try PersistenceController.makeContainer(inMemory: true)
         let queue = QueueStore(
             context: persistence.container.mainContext,
@@ -555,7 +857,8 @@ private extension PlaybackCoordinatorPodcastEngineTests {
         let coordinator = PlaybackCoordinator(
             queue: queue,
             podcastEngine: engine,
-            youtubePlayer: youtubePlayer
+            youtubePlayer: youtubePlayer,
+            sleepTimerDelay: sleepTimerDelay
         )
         return Harness(
             container: persistence.container,
@@ -700,7 +1003,7 @@ private final class FakePodcastPlaybackEngine: PodcastPlaybackEngine {
         switch event {
         case .ended, .stalled, .failed:
             isPlaying = false
-        case .timeChanged:
+        case .timeChanged, .bufferingChanged:
             break
         }
         guard let loadID = loadID ?? loads.last?.loadID else { return }

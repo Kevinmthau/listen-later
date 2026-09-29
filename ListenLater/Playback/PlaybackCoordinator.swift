@@ -17,6 +17,14 @@ enum PlaybackTransportState: Equatable {
     }
 }
 
+enum SleepTimer: Equatable {
+    case off
+    /// Pause playback at this time.
+    case until(Date)
+    /// Pause when the current item finishes instead of advancing.
+    case endOfItem
+}
+
 @MainActor
 @Observable
 final class PlaybackCoordinator {
@@ -26,6 +34,9 @@ final class PlaybackCoordinator {
     private(set) var duration: TimeInterval = 0
     private(set) var playbackRate: Double = 1
     private(set) var isForeground = true
+    /// Playback is wanted but the player is still waiting for media.
+    private(set) var isBuffering = false
+    private(set) var sleepTimer: SleepTimer = .off
     var notice: String?
 
     let youtubePlayer: YouTubePlayerModel
@@ -33,11 +44,18 @@ final class PlaybackCoordinator {
     @ObservationIgnored private let queue: QueueStore
     @ObservationIgnored private let podcastEngine: PodcastPlaybackEngine
     @ObservationIgnored private let audioSession: AVAudioSession
+    @ObservationIgnored private let sleepTimerDelay: @Sendable (TimeInterval) async throws -> Void
+    @ObservationIgnored private var sleepTimerTask: Task<Void, Never>?
     @ObservationIgnored private var preparedItemID: UUID?
     @ObservationIgnored private var pendingResolutionAutoplayItemID: UUID?
     @ObservationIgnored private var activePodcastLoadID: UUID?
     @ObservationIgnored private var activeYouTubeLoadID: UUID?
     @ObservationIgnored private var wasPlayingBeforeInterruption = false
+    /// Set once a sleep timer has paused playback, or left the next item
+    /// paused at the end of one. Until something is played on purpose,
+    /// items that replace the paused one, for example after a failure or
+    /// when another device finishes it, are left paused too.
+    @ObservationIgnored private var sleepTimerHoldsPlayback = false
     @ObservationIgnored private var remoteCommandTargets: [(MPRemoteCommand, Any)] = []
     @ObservationIgnored private var notificationObservers: [NSObjectProtocol] = []
 
@@ -49,11 +67,25 @@ final class PlaybackCoordinator {
         podcastEngine.renderingPlayer
     }
 
+    /// True while the play control should show progress instead of a glyph.
+    var isWaitingForMedia: Bool {
+        transportState == .loading || (transportState == .playing && isBuffering)
+    }
+
+    /// Whether Next has another item to move to.
+    var hasNextItem: Bool {
+        guard let item = currentItem else { return false }
+        return nextUnplayedItem(after: item) != nil
+    }
+
     init(
         queue: QueueStore,
         podcastEngine: PodcastPlaybackEngine? = nil,
         youtubePlayer: YouTubePlayerModel? = nil,
-        audioSession: AVAudioSession? = nil
+        audioSession: AVAudioSession? = nil,
+        sleepTimerDelay: @escaping @Sendable (TimeInterval) async throws -> Void = {
+            try await Task.sleep(for: .seconds($0))
+        }
     ) {
         let podcastEngine = podcastEngine ?? AVPlayerPodcastEngine()
         let youtubePlayer = youtubePlayer ?? YouTubePlayerModel()
@@ -61,6 +93,7 @@ final class PlaybackCoordinator {
         self.podcastEngine = podcastEngine
         self.youtubePlayer = youtubePlayer
         self.audioSession = audioSession ?? .sharedInstance()
+        self.sleepTimerDelay = sleepTimerDelay
 
         podcastEngine.eventHandler = { [weak self] loadID, event in
             self?.handlePodcastEvent(loadID: loadID, event: event)
@@ -105,6 +138,9 @@ final class PlaybackCoordinator {
     }
 
     func play() {
+        sleepTimerHoldsPlayback = false
+        // Playing on purpose supersedes an interruption's pending resume.
+        wasPlayingBeforeInterruption = false
         guard let item = currentItem else {
             guard let first = queue.firstUnplayed() else {
                 notice = "Your queue is caught up."
@@ -125,15 +161,25 @@ final class PlaybackCoordinator {
             return
         }
 
-        guard preparedItemID == item.id else {
+        // A social video's signed link expires within minutes, so one paused
+        // for longer (e.g. left ready by the sleep timer overnight) goes back
+        // through start(), which refreshes the link, rather than resuming.
+        // One that is still playing already has its media and carries on.
+        guard preparedItemID == item.id,
+              transportState.isPlaying || !item.playbackURLNeedsRefresh()
+        else {
             start(item)
             return
         }
 
         switch item.source {
         case .podcast, .socialVideo:
+            // A notice about why playback paused is stale once it resumes;
+            // clear it first, so a problem activating audio still shows.
+            notice = nil
             activateAudioSession()
             podcastEngine.play()
+            isBuffering = !podcastEngine.isPlaying
             if item.source.isVideo {
                 queue.recordPlaybackStarted(for: item)
             }
@@ -155,6 +201,9 @@ final class PlaybackCoordinator {
     }
 
     func start(_ item: QueueItem, autoplay: Bool = true) {
+        if autoplay {
+            sleepTimerHoldsPlayback = false
+        }
         saveCurrentProgress(force: true)
         let currentUsesNativePlayback =
             currentItem.map { $0.source != .youtube } ?? false
@@ -168,7 +217,8 @@ final class PlaybackCoordinator {
         parkCurrentTransport(
             deactivateAudioSession: shouldDeactivatePodcastSession
         )
-        notice = nil
+        notice = sleepTimerHoldsPlayback ? Self.sleepTimerNotice : nil
+        isBuffering = false
         currentItemID = item.id
         preparedItemID = nil
         pendingResolutionAutoplayItemID = nil
@@ -224,6 +274,7 @@ final class PlaybackCoordinator {
 
     func pause() {
         pendingResolutionAutoplayItemID = nil
+        isBuffering = false
         guard let item = currentItem else {
             podcastEngine.pause()
             youtubePlayer.pause()
@@ -315,6 +366,57 @@ final class PlaybackCoordinator {
         advance(from: item)
     }
 
+    /// Pauses playback after `minutes`, whichever item is playing then.
+    func setSleepTimer(minutes: Int, now: Date = Date()) {
+        let delay = TimeInterval(minutes * 60)
+        sleepTimerTask?.cancel()
+        sleepTimer = .until(now.addingTimeInterval(delay))
+        let wait = sleepTimerDelay
+        sleepTimerTask = Task { [weak self] in
+            do {
+                try await wait(delay)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            self?.sleepTimerDidFire()
+        }
+    }
+
+    /// Pauses when the current item finishes, leaving the next one ready.
+    func setSleepTimerAtEndOfItem() {
+        sleepTimerTask?.cancel()
+        sleepTimerTask = nil
+        sleepTimer = .endOfItem
+    }
+
+    func cancelSleepTimer() {
+        sleepTimerTask?.cancel()
+        sleepTimerTask = nil
+        sleepTimer = .off
+    }
+
+    private func sleepTimerDidFire() {
+        sleepTimerTask = nil
+        sleepTimer = .off
+        // Audio paused by an interruption, such as a call, would resume when
+        // the interruption ends; the timer cancels that resume too.
+        let wouldResumeAfterInterruption = wasPlayingBeforeInterruption
+        wasPlayingBeforeInterruption = false
+        guard currentItem != nil,
+              transportState.isPlaying
+                || transportState == .loading
+                || wouldResumeAfterInterruption
+        else {
+            return
+        }
+        pause()
+        sleepTimerHoldsPlayback = true
+        notice = Self.sleepTimerNotice
+    }
+
+    private static let sleepTimerNotice = "Paused by the sleep timer."
+
     func sceneDidBecomeActive() {
         isForeground = true
         if transportState == .waitingForForeground, let item = currentItem {
@@ -332,6 +434,7 @@ final class PlaybackCoordinator {
         guard currentItem?.source == .youtube else { return }
         activeYouTubeLoadID = nil
         preparedItemID = nil
+        isBuffering = false
         youtubePlayer.pause()
         transportState = .waitingForForeground
         notice = "YouTube playback requires the app to remain open."
@@ -343,6 +446,7 @@ final class PlaybackCoordinator {
         pendingResolutionAutoplayItemID = nil
         activeYouTubeLoadID = nil
         preparedItemID = nil
+        isBuffering = false
         youtubePlayer.pause()
         transportState = .needsUserAction
         notice = "Tap Play to continue this YouTube video."
@@ -365,6 +469,7 @@ final class PlaybackCoordinator {
             activePodcastLoadID = nil
             activeYouTubeLoadID = nil
             transportState = .idle
+            isBuffering = false
             position = 0
             duration = 0
             clearNowPlaying()
@@ -447,11 +552,13 @@ final class PlaybackCoordinator {
         setRemoteCommandsEnabled(true)
         if autoplay {
             podcastEngine.play()
+            isBuffering = !podcastEngine.isPlaying
             if item.source.isVideo {
                 queue.recordPlaybackStarted(for: item)
             }
             transportState = .playing
         } else {
+            isBuffering = false
             transportState = .paused
         }
         updateNowPlaying()
@@ -520,13 +627,17 @@ final class PlaybackCoordinator {
             if durationChanged {
                 updateNowPlaying()
             }
+        case let .bufferingChanged(isWaiting):
+            if transportState == .playing {
+                isBuffering = isWaiting
+            }
         case .ended:
             activePodcastLoadID = nil
-            queue.markPlayed(item)
-            advance(from: item)
+            completeItem(item)
         case let .stalled(message):
             activePodcastLoadID = nil
             preparedItemID = nil
+            isBuffering = false
             transportState = .needsUserAction
             notice = "\(message) Tap Play to retry."
             saveCurrentProgress(force: true)
@@ -555,17 +666,25 @@ final class PlaybackCoordinator {
         case .ready:
             break
         case .playing:
+            // Includes the user starting the video in the player itself.
+            sleepTimerHoldsPlayback = false
             queue.recordPlaybackStarted(for: item)
+            isBuffering = false
             transportState = .playing
+            notice = nil
+        case .buffering:
+            if transportState == .playing {
+                isBuffering = true
+            }
         case .paused:
+            isBuffering = false
             if transportState == .playing || transportState == .loading {
                 transportState = .paused
             }
             saveCurrentProgress(force: true)
         case .ended:
             activeYouTubeLoadID = nil
-            queue.markPlayed(item)
-            advance(from: item)
+            completeItem(item)
         case let .progress(newPosition, newDuration):
             position = newPosition
             if newDuration > 0 {
@@ -588,9 +707,11 @@ final class PlaybackCoordinator {
                 force: true
             )
         case .autoplayBlocked:
+            isBuffering = false
             transportState = .needsUserAction
             notice = "Tap Play to start this YouTube video."
         case let .failed(code):
+            isBuffering = false
             if code == 153 {
                 transportState = .needsUserAction
                 notice = "The YouTube player is missing its client identity. Check setup."
@@ -618,18 +739,42 @@ final class PlaybackCoordinator {
         pendingResolutionAutoplayItemID = nil
 
         if item.status == .ready {
+            // A refresh that couldn't reach the resolver, e.g. offline,
+            // leaves the video ready with its old link. Starting it again
+            // would only refresh again, so wait for the user to retry.
+            guard !item.playbackURLNeedsRefresh() else {
+                transportState = .needsUserAction
+                notice = "Couldn’t refresh the video link. Tap Play to try again."
+                return
+            }
             start(item, autoplay: shouldAutoplay)
         } else if item.status == .unavailable {
             advanceAfterFailure()
         }
     }
 
+    /// Moves on from `item` to the next item, or finishes the queue. While
+    /// a sleep timer holds playback, the next item is left paused and shows
+    /// the timer's notice.
     private func advance(from item: QueueItem) {
         guard let next = nextUnplayedItem(after: item) else {
             finishQueue()
             return
         }
-        start(next)
+        start(next, autoplay: !sleepTimerHoldsPlayback)
+        if sleepTimerHoldsPlayback {
+            notice = Self.sleepTimerNotice
+        }
+    }
+
+    /// Handles a player's terminal event for `item`.
+    private func completeItem(_ item: QueueItem) {
+        queue.markPlayed(item)
+        if sleepTimer == .endOfItem {
+            sleepTimer = .off
+            sleepTimerHoldsPlayback = true
+        }
+        advance(from: item)
     }
 
     private func advanceAfterFailure() {
@@ -637,11 +782,7 @@ final class PlaybackCoordinator {
             finishQueue()
             return
         }
-        guard let next = nextUnplayedItem(after: item) else {
-            finishQueue()
-            return
-        }
-        start(next)
+        advance(from: item)
     }
 
     private func nextUnplayedItem(after item: QueueItem) -> QueueItem? {
@@ -665,11 +806,14 @@ final class PlaybackCoordinator {
         currentItemID = nil
         preparedItemID = nil
         pendingResolutionAutoplayItemID = nil
+        sleepTimerHoldsPlayback = false
         activePodcastLoadID = nil
         activeYouTubeLoadID = nil
         transportState = .idle
+        isBuffering = false
         position = 0
         duration = 0
+        cancelSleepTimer()
         clearNowPlaying()
         notice = finalNotice
     }
@@ -681,6 +825,7 @@ final class PlaybackCoordinator {
         youtubePlayer.pause()
         activePodcastLoadID = nil
         activeYouTubeLoadID = nil
+        isBuffering = false
         setRemoteCommandsEnabled(false)
         if deactivateAudioSession {
             try? audioSession.setActive(
