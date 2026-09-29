@@ -208,7 +208,9 @@ The app posts the shared X or Instagram URL to `/resolve`, validates the returne
 public HTTPS media endpoint, and streams it with the native player. It does not
 save a copy into Photos or download the video for offline use. `video-grabber`
 direct URLs can expire quickly, so `QueueItem` stores an expiration time and
-automatically calls `/resolve` again before playback when needed. Private or
+automatically calls `/resolve` again before playback when needed. When the
+next item is a social video, its link is refreshed while the current item has
+under a minute left, so automatic advances don't pause to fetch it. Private or
 protected posts still depend on the server’s `COOKIES_FILE` configuration.
 
 ## Signing, identifiers, and capabilities
@@ -366,7 +368,11 @@ an item unavailable after a 30-second startup/rebuffer watchdog expires so the
 queue can continue. AirPlay and Bluetooth A2DP are enabled.
 
 Native X/Instagram playback uses the same engine and can keep audio active when
-the app backgrounds, although the video surface is visible only in the app. By
+the app backgrounds. The inline video is sized to the video's own shape (a
+vertical reel is tall and narrow), has a full-screen button that opens the
+system player (which may rotate to landscape and offers Picture in Picture and
+AirPlay), and continues in Picture in Picture when you leave the app while it
+plays. By
 default, automatic advances made in the background don't start videos: the
 queue plays the next podcast and leaves videos in Up Next, and a video that is
 reached with no audio left is loaded but paused. Turning off **Save Videos for
@@ -620,7 +626,8 @@ privacy policy or legal terms.
 - The MVP streams media and does not download podcasts or social videos for
   offline listening.
 - There are no recommendations, discovery feeds, accounts, CarPlay UI, Apple
-  Watch app, or macOS-specific interface.
+  Watch app, or macOS-specific interface. On iPad (regular width), the player
+  and the queue sit side by side.
 - CloudKit production schema promotion and the in-app YouTube privacy/terms
   acceptance flow are release gates, not optional polish.
 

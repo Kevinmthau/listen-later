@@ -47,6 +47,7 @@ final class PlaybackCoordinator {
     @ObservationIgnored private let sleepTimerDelay: @Sendable (TimeInterval) async throws -> Void
     @ObservationIgnored private let videosWaitForScreen: () -> Bool
     @ObservationIgnored private var sleepTimerTask: Task<Void, Never>?
+    @ObservationIgnored private var prefetchedItemIDs: Set<UUID> = []
     @ObservationIgnored private var preparedItemID: UUID?
     @ObservationIgnored private var pendingResolutionAutoplayItemID: UUID?
     @ObservationIgnored private var activePodcastLoadID: UUID?
@@ -225,6 +226,7 @@ final class PlaybackCoordinator {
         )
         notice = sleepTimerHoldsPlayback ? Self.sleepTimerNotice : nil
         isBuffering = false
+        prefetchedItemIDs.remove(item.id)
         currentItemID = item.id
         preparedItemID = nil
         pendingResolutionAutoplayItemID = nil
@@ -649,6 +651,7 @@ final class PlaybackCoordinator {
             if durationChanged {
                 updateNowPlaying()
             }
+            prefetchNextVideoIfNeeded(after: item)
         case let .bufferingChanged(isWaiting):
             if transportState == .playing {
                 isBuffering = isWaiting
@@ -718,6 +721,7 @@ final class PlaybackCoordinator {
                 duration: newDuration,
                 rate: playbackRate
             )
+            prefetchNextVideoIfNeeded(after: item)
         case let .playbackRateChanged(actualRate):
             guard actualRate.isFinite, actualRate > 0 else { return }
             playbackRate = actualRate
@@ -792,6 +796,26 @@ final class PlaybackCoordinator {
         start(next, autoplay: !sleepTimerHoldsPlayback)
         if sleepTimerHoldsPlayback {
             notice = Self.sleepTimerNotice
+        }
+    }
+
+    /// Social video links expire within minutes, so fetching one when its
+    /// turn comes leaves a gap between items. Refresh the next one while the
+    /// current item has under a minute left.
+    private func prefetchNextVideoIfNeeded(after item: QueueItem) {
+        let remaining = duration - position
+        guard duration > 0,
+              remaining < 60,
+              let next = nextUnplayedItem(after: item),
+              next.source == .socialVideo,
+              next.status == .ready,
+              next.playbackURLNeedsRefresh(at: Date().addingTimeInterval(max(0, remaining) + 5)),
+              prefetchedItemIDs.insert(next.id).inserted
+        else {
+            return
+        }
+        Task { [weak self] in
+            await self?.queue.prefetchPlaybackURL(for: next)
         }
     }
 

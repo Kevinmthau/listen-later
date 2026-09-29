@@ -11,6 +11,7 @@ struct QueueScreen: View {
     let model: AppModel
 
     @Environment(\.openURL) private var openURL
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var editMode: EditMode = .inactive
     @State private var presentedSheet: SheetDestination?
     @State private var isPlayerCompact = false
@@ -19,21 +20,35 @@ struct QueueScreen: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                NowPlayingCard(
-                    playback: model.playback,
-                    queue: model.queue,
-                    isCompact: isPlayerCompact,
-                    onExpand: expandPlayer,
-                    onMinimize: minimizePlayer
-                )
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
+            Group {
+                if isWideLayout {
+                    // Side by side on iPad: the player keeps a phone-like
+                    // width instead of a full-width strip, and never needs
+                    // to collapse.
+                    HStack(spacing: 0) {
+                        VStack(spacing: 0) {
+                            nowPlayingCard(canMinimize: false)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(16)
+                        .frame(width: 440)
 
-                Divider()
+                        Divider()
 
-                queueList
+                        queueList
+                    }
+                } else {
+                    VStack(spacing: 0) {
+                        nowPlayingCard(canMinimize: true)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 8)
+                            .padding(.bottom, 12)
+
+                        Divider()
+
+                        queueList
+                    }
+                }
             }
             .overlay(alignment: .bottom) {
                 if let toast {
@@ -221,11 +236,26 @@ struct QueueScreen: View {
         }
     }
 
+    private var isWideLayout: Bool {
+        horizontalSizeClass == .regular
+    }
+
+    private func nowPlayingCard(canMinimize: Bool) -> some View {
+        NowPlayingCard(
+            playback: model.playback,
+            queue: model.queue,
+            isCompact: canMinimize && isPlayerCompact,
+            onExpand: expandPlayer,
+            onMinimize: canMinimize ? minimizePlayer : nil
+        )
+    }
+
     private var playerMinimizingGesture: some Gesture {
         DragGesture(minimumDistance: 12)
             .onEnded { value in
                 let verticalDistance = value.translation.height
                 guard
+                    !isWideLayout,
                     !isPlayerCompact,
                     !editMode.isEditing,
                     model.playback.currentItem != nil,

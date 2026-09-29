@@ -723,6 +723,35 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(harness.coordinator.currentItemID, podcast.id)
     }
 
+    func testNextSocialVideoLinkIsRefreshedBeforeItsTurn() async throws {
+        let harness = try makeHarness(providers: [RefreshingSocialVideoProvider()])
+        let podcast = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let video = appendSocialVideo(to: harness.queue, ordinal: 2)
+        video.playbackURLExpiresAt = .distantPast
+        harness.coordinator.start(podcast)
+        podcast.progressUpdatedAt = .distantPast
+
+        harness.engine.emit(.timeChanged(position: 100, duration: 300))
+        XCTAssertTrue(
+            video.playbackURLNeedsRefresh(),
+            "Nothing is fetched while the current item has minutes left."
+        )
+
+        harness.engine.emit(.timeChanged(position: 260, duration: 300))
+        let deadline = Date().addingTimeInterval(2)
+        while video.playbackURLNeedsRefresh(), Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertFalse(video.playbackURLNeedsRefresh())
+        XCTAssertEqual(video.status, .ready)
+        XCTAssertEqual(
+            video.playbackURL,
+            URL(string: "https://cdn.example.com/refreshed/2.mp4")
+        )
+        XCTAssertEqual(harness.coordinator.currentItemID, podcast.id)
+    }
+
     func testBufferingEventsDriveTheWaitingState() throws {
         let harness = try makeHarness()
         let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
@@ -1062,12 +1091,13 @@ private extension PlaybackCoordinatorPodcastEngineTests {
         sleepTimerDelay: @escaping @Sendable (TimeInterval) async throws -> Void = {
             try await Task.sleep(for: .seconds($0))
         },
-        videosWaitForScreen: Bool = true
+        videosWaitForScreen: Bool = true,
+        providers: [any MediaProvider] = []
     ) throws -> Harness {
         let persistence = try PersistenceController.makeContainer(inMemory: true)
         let queue = QueueStore(
             context: persistence.container.mainContext,
-            providers: ProviderRegistry(providers: [])
+            providers: ProviderRegistry(providers: providers)
         )
         let engine = FakePodcastPlaybackEngine()
         let youtubePlayer = YouTubePlayerModel()
@@ -1166,6 +1196,32 @@ private extension PlaybackCoordinatorPodcastEngineTests {
                 ),
                 isMadeForKids: false
             )
+        )
+    }
+}
+
+private struct RefreshingSocialVideoProvider: MediaProvider {
+    let source = ProviderSource.socialVideo
+
+    func canResolve(_ url: URL) -> Bool {
+        SocialVideoURLParser.isSupported(url)
+    }
+
+    func resolve(_ url: URL) async throws -> ProviderResolvedItem {
+        ProviderResolvedItem(
+            originalURL: url,
+            canonicalURL: url,
+            title: "X video",
+            creatorName: "@example",
+            artworkURL: nil,
+            duration: nil,
+            publishedAt: nil,
+            source: .socialVideo,
+            playback: .remoteVideo(
+                URL(string: "https://cdn.example.com/refreshed/\(url.lastPathComponent).mp4")!,
+                expiresAt: Date().addingTimeInterval(600)
+            ),
+            isMadeForKids: false
         )
     }
 }
