@@ -320,6 +320,9 @@ struct QueueScreen: View {
             // The whole row is the target, including its empty space.
             .contentShape(Rectangle())
         }
+        // A default-style Button in a List draws its label in the tint
+        // colour, which would turn every title and caption into the accent.
+        .buttonStyle(.plain)
         .listRowBackground(
             model.playback.currentItemID == item.id
                 ? Palette.playingRow
