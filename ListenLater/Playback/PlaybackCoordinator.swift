@@ -431,6 +431,10 @@ final class PlaybackCoordinator {
 
     func sceneDidBecomeActive() {
         isForeground = true
+        // Catch up with the queue first, under the on-screen rules: a YouTube
+        // video that waited for the screen then loads at its synced position,
+        // and one finished or removed elsewhere meanwhile isn't loaded at all.
+        reconcileQueueState()
         if transportState == .waitingForForeground, let item = currentItem {
             startYouTube(item, autoplay: false)
             if transportState == .loading {

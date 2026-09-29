@@ -664,6 +664,65 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(harness.coordinator.transportState, .playing)
     }
 
+    func testReturningToTheAppAdvancesWithTheOnScreenRules() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let video = appendSocialVideo(to: harness.queue, ordinal: 2)
+        let second = appendPodcast(to: harness.queue, ordinal: 3, duration: 600)
+        harness.coordinator.start(first)
+        harness.coordinator.pause()
+        harness.coordinator.sceneWillResignActive()
+
+        // Another device finishes the podcast while this one is away.
+        harness.queue.markPlayed(first)
+        harness.coordinator.sceneDidBecomeActive()
+
+        XCTAssertEqual(harness.coordinator.currentItemID, video.id)
+        XCTAssertEqual(
+            harness.queue.items.filter { !$0.isInPlayedSection }.map(\.id),
+            [video.id, second.id]
+        )
+    }
+
+    func testAYouTubeVideoWaitingForTheScreenLoadsAtItsSyncedPosition() throws {
+        let harness = try makeHarness()
+        let item = appendYouTube(to: harness.queue, ordinal: 1)
+        harness.coordinator.sceneWillResignActive()
+        harness.coordinator.playOrPause()
+        XCTAssertEqual(harness.coordinator.transportState, .waitingForForeground)
+
+        // Progress saved on another device while this one was away.
+        harness.queue.saveProgress(
+            for: item,
+            position: 1_200,
+            duration: 2_400,
+            rate: 1.5,
+            force: true
+        )
+        harness.coordinator.sceneDidBecomeActive()
+
+        XCTAssertEqual(harness.youtubePlayer.videoID, "video00001")
+        XCTAssertEqual(harness.youtubePlayer.currentTime, 1_200)
+        XCTAssertEqual(harness.coordinator.playbackRate, 1.5)
+        XCTAssertEqual(harness.coordinator.transportState, .paused)
+    }
+
+    func testAYouTubeVideoFinishedElsewhereIsNotLoadedOnReturn() throws {
+        let harness = try makeHarness()
+        let youtube = appendYouTube(to: harness.queue, ordinal: 1)
+        let podcast = appendPodcast(to: harness.queue, ordinal: 2, duration: 300)
+        harness.coordinator.sceneWillResignActive()
+        // Chosen by hand: in the background, Play itself would pick audio.
+        harness.coordinator.start(youtube)
+        XCTAssertEqual(harness.coordinator.transportState, .waitingForForeground)
+
+        harness.queue.markPlayed(youtube)
+        harness.coordinator.sceneDidBecomeActive()
+
+        XCTAssertNil(harness.youtubePlayer.videoID)
+        XCTAssertEqual(harness.coordinator.currentItemID, podcast.id)
+    }
+
     func testBufferingEventsDriveTheWaitingState() throws {
         let harness = try makeHarness()
         let item = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
