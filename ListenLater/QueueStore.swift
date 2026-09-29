@@ -2,12 +2,23 @@ import Foundation
 import Observation
 import SwiftData
 
+/// A short message for the user, shown without interrupting them.
+struct UserMessage: Identifiable, Equatable {
+    let id = UUID()
+    let text: String
+}
+
 @MainActor
 @Observable
 final class QueueStore {
     private(set) var items: [QueueItem] = []
     private(set) var isResolving = false
-    var lastErrorMessage: String?
+    /// Set only for problems with something the user just did. Background
+    /// upkeep (metadata refreshes, relaunch recovery) stays quiet; affected
+    /// items show their reason in the queue instead.
+    var userMessage: UserMessage?
+    /// The most recent failure of any kind, quiet or not, for diagnostics.
+    var lastFailure: String?
 
     @ObservationIgnored private let context: ModelContext
     @ObservationIgnored private let providers: ProviderRegistry
@@ -41,26 +52,41 @@ final class QueueStore {
                 return $0.id.uuidString < $1.id.uuidString
             }
         } catch {
-            lastErrorMessage = "Couldn’t load the queue: \(error.localizedDescription)"
+            report("Couldn’t load the queue: \(error.localizedDescription)")
         }
     }
 
+    /// Adds `url` and waits for it to resolve.
     @discardableResult
     func add(url: URL) async -> QueueItem? {
         guard let item = stage(url: url, pendingShareReceiptID: nil) else {
             return nil
         }
         let itemID = item.id
-        await resolve(item)
+        await resolve(item, reportsFailure: true)
         return self.item(id: itemID)
+    }
+
+    /// Adds `url` right away and resolves it in the background, like a
+    /// shared link, so the caller doesn't wait on the network. Returns nil
+    /// when the link can't be added, with the reason in `userMessage`.
+    @discardableResult
+    func enqueue(url: URL) -> QueueItem? {
+        guard let item = stage(url: url, pendingShareReceiptID: nil) else {
+            return nil
+        }
+        Task { [weak self] in
+            await self?.resolve(item, reportsFailure: true)
+        }
+        return item
     }
 
     private func stage(
         url: URL,
         pendingShareReceiptID: UUID?
     ) -> QueueItem? {
-        guard ProviderURLSupport.isHTTPURL(url) else {
-            lastErrorMessage = "Only secure public HTTPS links are supported."
+        if case let .unsupported(reason) = LinkClassifier.classify(url) {
+            report(reason)
             return nil
         }
 
@@ -116,7 +142,7 @@ final class QueueStore {
         item.unavailableReason = nil
         item.updatedAt = Date()
         saveAndRefresh()
-        await resolve(item)
+        await resolve(item, reportsFailure: true)
     }
 
     func refreshPlaybackURL(for item: QueueItem) async {
@@ -142,18 +168,21 @@ final class QueueStore {
             let batch = try inbox.pendingBatch()
             if batch.quarantinedFileCount > 0 {
                 let count = batch.quarantinedFileCount
-                lastErrorMessage =
-                    "\(count) damaged shared-link file\(count == 1 ? " was" : "s were") moved aside."
+                report(
+                    count == 1
+                        ? "A shared link couldn’t be read and was skipped."
+                        : "\(count) shared links couldn’t be read and were skipped."
+                )
             }
             for receipt in batch.receipts {
-                guard ProviderURLSupport.isHTTPURL(receipt.share.url) else {
+                if case let .unsupported(reason) = LinkClassifier.classify(receipt.share.url) {
                     do {
                         try inbox.acknowledge(receipt)
-                        lastErrorMessage =
-                            "Ignored a shared link that was not a secure public HTTPS URL."
+                        report("Skipped a shared link. \(reason)")
                     } catch {
-                        lastErrorMessage =
-                            "Couldn’t discard an invalid shared link: \(error.localizedDescription)"
+                        recordFailure(
+                            "Couldn’t discard an unsupported shared link: \(error.localizedDescription)"
+                        )
                         break
                     }
                     continue
@@ -166,8 +195,9 @@ final class QueueStore {
                     do {
                         try inbox.acknowledge(receipt)
                     } catch {
-                        lastErrorMessage =
+                        recordFailure(
                             "Couldn’t acknowledge an imported link: \(error.localizedDescription)"
+                        )
                         break
                     }
                     if existing.status == .resolving {
@@ -188,15 +218,16 @@ final class QueueStore {
                 do {
                     try inbox.acknowledge(receipt)
                 } catch {
-                    lastErrorMessage =
+                    recordFailure(
                         "Couldn’t acknowledge an imported link: \(error.localizedDescription)"
+                    )
                     itemsToResolve.append(item)
                     break
                 }
                 itemsToResolve.append(item)
             }
         } catch {
-            lastErrorMessage = "Couldn’t import shared links: \(error.localizedDescription)"
+            recordFailure("Couldn’t import shared links: \(error.localizedDescription)")
         }
 
         // Release the inbox staging lock before network work. A new Share
@@ -448,7 +479,7 @@ final class QueueStore {
                 "Couldn’t save playback progress: \(error.localizedDescription)"
             context.rollback()
             refresh()
-            lastErrorMessage = message
+            report(message)
         }
     }
 
@@ -548,9 +579,13 @@ final class QueueStore {
         saveAndRefresh()
     }
 
+    /// Resolves `item`'s metadata and playback reference. `reportsFailure`
+    /// is set when the user asked for this (adding or retrying a link), so a
+    /// failure becomes a message; otherwise only the item shows it.
     private func resolve(
         _ item: QueueItem,
-        preserveAvailabilityOnTransientFailure: Bool = false
+        preserveAvailabilityOnTransientFailure: Bool = false,
+        reportsFailure: Bool = false
     ) async {
         let itemID = item.id
         guard let url = item.originalURL,
@@ -611,7 +646,12 @@ final class QueueStore {
                 liveItem.updatedAt = Date()
                 saveAndRefresh()
             }
-            lastErrorMessage = "Couldn’t resolve \(url.host() ?? "this link"): \(error.localizedDescription)"
+            let reason = error.localizedDescription
+            if reportsFailure {
+                report(reason)
+            } else {
+                recordFailure("\(url.host() ?? "A link"): \(reason)")
+            }
             if wasAwaitingResolution {
                 resolutionHandler?(liveItem)
             }
@@ -727,8 +767,20 @@ final class QueueStore {
             let message = "Couldn’t save the queue: \(error.localizedDescription)"
             context.rollback()
             refresh()
-            lastErrorMessage = message
+            report(message)
             return false
         }
+    }
+
+    /// Tells the user, once, about a problem with something they did.
+    private func report(_ text: String) {
+        lastFailure = text
+        guard userMessage?.text != text else { return }
+        userMessage = UserMessage(text: text)
+    }
+
+    /// Keeps a failure for diagnostics without interrupting the user.
+    private func recordFailure(_ text: String) {
+        lastFailure = text
     }
 }

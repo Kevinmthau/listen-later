@@ -84,41 +84,60 @@ enum ProviderResolutionError: Error, Equatable, Sendable {
     case network(String)
 }
 
+/// Messages are shown in the queue, so they say what happened and what to
+/// do in plain words rather than repeating URLs or protocol details.
 extension ProviderResolutionError: LocalizedError {
     var errorDescription: String? {
         switch self {
-        case let .invalidURL(url):
-            "The URL is not a supported secure public HTTPS URL: \(url.absoluteString)"
-        case let .unsupportedURL(url):
-            "No provider recognizes \(url.absoluteString)."
+        case .invalidURL:
+            "MushRadio only supports public https:// links."
+        case .unsupportedURL:
+            "MushRadio doesn’t support this kind of link."
         case .missingYouTubeAPIKey:
-            "The YouTube Data API key is not configured."
-        case let .invalidYouTubeVideoURL(url):
-            "The URL does not contain a valid YouTube video ID: \(url.absoluteString)"
-        case let .invalidSocialVideoURL(url):
-            "The URL is not a supported public X or Instagram video post: \(url.absoluteString)"
+            "YouTube isn’t set up in this build of MushRadio."
+        case .invalidYouTubeVideoURL:
+            "This YouTube link doesn’t point to a video."
+        case .invalidSocialVideoURL:
+            "Only X and Instagram posts with a video can be added."
         case .videoGrabberUnauthorized:
-            "The video resolver rejected its API token. Check the app’s video-grabber configuration."
+            "The video service didn’t accept this app’s access token."
         case let .itemUnavailable(reason):
-            "The item is unavailable. \(reason)"
-        case let .youtubeVideoNotEmbeddable(videoID):
-            "YouTube video \(videoID) does not permit embedded playback."
-        case let .invalidHTTPResponse(url):
-            "The server returned an invalid response for \(url.absoluteString)."
-        case let .httpStatus(status, url):
-            "The server returned HTTP \(status) for \(url.absoluteString)."
-        case let .responseTooLarge(url, maximumBytes):
-            "The response from \(url.absoluteString) exceeded \(maximumBytes) bytes."
-        case let .malformedResponse(message):
-            "The provider returned malformed data. \(message)"
-        case let .rssFeedNotFound(url):
-            "No podcast RSS feed was advertised by \(url.absoluteString)."
-        case let .podcastEpisodeNotFound(url):
-            "No matching podcast episode was found for \(url.absoluteString)."
-        case let .podcastAudioEnclosureMissing(url):
-            "The matching podcast episode has no playable audio enclosure: \(url.absoluteString)."
+            reason
+        case .youtubeVideoNotEmbeddable:
+            "The owner of this video only allows it to play on YouTube."
+        case .invalidHTTPResponse:
+            "The site sent a response MushRadio couldn’t read. Try again later."
+        case let .httpStatus(status, _):
+            Self.describe(httpStatus: status)
+        case .responseTooLarge:
+            "The page was too large for MushRadio to read."
+        case .malformedResponse:
+            "The service sent data MushRadio couldn’t read. Try again later."
+        case .rssFeedNotFound:
+            "This page doesn’t link to a podcast feed, so MushRadio can’t find the episode."
+        case .podcastEpisodeNotFound:
+            "MushRadio couldn’t find this episode in the show’s feed."
+        case .podcastAudioEnclosureMissing:
+            "This episode doesn’t include audio MushRadio can play."
         case let .network(message):
-            "The request failed. \(message)"
+            message.isEmpty
+                ? "Couldn’t connect. Check your connection and try again."
+                : message
+        }
+    }
+
+    private static func describe(httpStatus status: Int) -> String {
+        switch status {
+        case 401, 403:
+            "The site wouldn’t let MushRadio open this link."
+        case 404, 410:
+            "This page couldn’t be found. It may have been removed."
+        case 429:
+            "The site is busy. Try again in a moment."
+        case 500...599:
+            "The site had a problem. Try again later."
+        default:
+            "The site returned an error (\(status))."
         }
     }
 }

@@ -73,9 +73,58 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertNil(result)
         XCTAssertTrue(harness.store.items.isEmpty)
         XCTAssertEqual(
-            harness.store.lastErrorMessage,
-            "Only secure public HTTPS links are supported."
+            harness.store.userMessage?.text,
+            "MushRadio only supports public https:// links."
         )
+    }
+
+    func testAddRejectsKnownUnsupportedLinksWithAReason() async throws {
+        let harness = try makeHarness(providers: [])
+        let result = await harness.store.add(
+            url: URL(string: "https://open.spotify.com/episode/4rOoJ6Egrf8K2IrywzwOMk")!
+        )
+
+        XCTAssertNil(result)
+        XCTAssertTrue(harness.store.items.isEmpty)
+        XCTAssertTrue(harness.store.userMessage?.text.contains("Spotify") == true)
+    }
+
+    func testFailedAddShowsTheReasonOnTheItemAndAsAMessage() async throws {
+        let harness = try makeHarness(
+            providers: [TransientFailingYouTubeProvider()]
+        )
+
+        let added = await harness.store.add(
+            url: URL(string: "https://www.youtube.com/watch?v=dQw4w9WgXcQ")!
+        )
+        let item = try XCTUnwrap(added)
+
+        XCTAssertEqual(item.status, .unavailable)
+        XCTAssertEqual(item.unavailableReason, "Temporary failure")
+        XCTAssertEqual(harness.store.userMessage?.text, "Temporary failure")
+    }
+
+    func testEnqueueAddsImmediatelyAndResolvesInTheBackground() async throws {
+        let url = URL(string: "https://podcasts.example/episodes/slow")!
+        let gate = QueueResolutionGate()
+        let harness = try makeHarness(
+            providers: [DelayedQueueProvider(gate: gate)]
+        )
+
+        let enqueued = harness.store.enqueue(url: url)
+        let item = try XCTUnwrap(enqueued)
+        XCTAssertEqual(item.status, .resolving)
+        XCTAssertEqual(harness.store.items.map(\.id), [item.id])
+
+        await gate.waitUntilStarted()
+        await gate.release()
+        let deadline = Date().addingTimeInterval(2)
+        while item.status == .resolving, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(item.status, .ready)
+        XCTAssertEqual(item.title, "Slow episode")
     }
 
     func testAddAndRefreshSocialVideoUsesExpiringVideoGrabberURL() async throws {
@@ -620,12 +669,13 @@ final class QueueStoreTests: XCTestCase {
                 "YouTube metadata expired and could not be refreshed."
             )
 
-            harness.store.lastErrorMessage = nil
+            harness.store.lastFailure = nil
             await harness.store.refreshExpiredYouTubeMetadata(now: now)
             XCTAssertNil(
-                harness.store.lastErrorMessage,
+                harness.store.lastFailure,
                 "Purged unavailable metadata should wait for manual retry."
             )
+            XCTAssertNil(harness.store.userMessage)
         }
     }
 
@@ -653,7 +703,11 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertEqual(item.status, .ready)
         XCTAssertNil(item.unavailableReason)
         XCTAssertTrue(
-            harness.store.lastErrorMessage?.contains("Temporary failure") == true
+            harness.store.lastFailure?.contains("Temporary failure") == true
+        )
+        XCTAssertNil(
+            harness.store.userMessage,
+            "Background refreshes don't interrupt the user."
         )
     }
 
@@ -677,10 +731,10 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertEqual(item.title, "API title")
         XCTAssertNotNil(item.metadataFetchedAt)
 
-        harness.store.lastErrorMessage = nil
+        harness.store.lastFailure = nil
         await harness.store.refreshExpiredYouTubeMetadata(now: now)
         XCTAssertNil(
-            harness.store.lastErrorMessage,
+            harness.store.lastFailure,
             "Terminally unavailable metadata should not retry automatically."
         )
 
@@ -689,7 +743,7 @@ final class QueueStoreTests: XCTestCase {
         )
         XCTAssertEqual(item.title, "YouTube video")
         XCTAssertNil(item.metadataFetchedAt)
-        XCTAssertNil(harness.store.lastErrorMessage)
+        XCTAssertNil(harness.store.lastFailure)
     }
 }
 

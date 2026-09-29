@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 private final class ShareStatusModel {
     enum State {
         case adding
-        case added
+        case added(LinkKind)
         case failed(String)
     }
 
@@ -44,8 +44,11 @@ final class ShareViewController: UIViewController {
     private func addSharedURL() async {
         do {
             let url = try await firstSharedURL()
-            guard ProviderURLSupport.isHTTPURL(url) else {
-                throw ShareError.unsupportedURL
+            // Decide from the URL alone, so an unplayable link is refused
+            // here instead of failing later in the app.
+            let kind = LinkClassifier.classify(url)
+            if case let .unsupported(reason) = kind {
+                throw ShareError.unsupported(reason)
             }
 
             let appGroup =
@@ -54,8 +57,10 @@ final class ShareViewController: UIViewController {
             let inbox = try SharedQueueInbox(appGroupIdentifier: appGroup)
             try inbox.enqueue(PendingShare(url: url))
 
-            statusModel.state = .added
-            try? await Task.sleep(for: .milliseconds(650))
+            statusModel.state = .added(kind)
+            // A page MushRadio still has to search carries a caveat worth
+            // a moment longer to read.
+            try? await Task.sleep(for: .milliseconds(kind == .webPage ? 1_600 : 650))
             extensionContext?.completeRequest(returningItems: nil)
         } catch {
             statusModel.state = .failed(error.localizedDescription)
@@ -75,7 +80,9 @@ final class ShareViewController: UIViewController {
                 if case let .url(url) = item {
                     return url
                 }
-                if case let .text(value) = item, let url = URL(string: value) {
+                if case let .text(value) = item,
+                   let url = LinkClassifier.link(fromUserText: value)
+                {
                     return url
                 }
             }
@@ -86,34 +93,14 @@ final class ShareViewController: UIViewController {
                 let item = try await provider.sharedItem(
                     forTypeIdentifier: UTType.plainText.identifier
                 )
-                if case let .text(value) = item, let url = firstURL(in: value) {
+                if case let .text(value) = item,
+                   let url = LinkClassifier.link(fromUserText: value)
+                {
                     return url
                 }
             }
         }
         throw ShareError.missingURL
-    }
-
-    private func firstURL(in text: String) -> URL? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let url = URL(string: trimmed),
-           ProviderURLSupport.isHTTPURL(url)
-        {
-            return url
-        }
-
-        guard let detector = try? NSDataDetector(
-            types: NSTextCheckingResult.CheckingType.link.rawValue
-        ) else {
-            return nil
-        }
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        return detector
-            .matches(in: text, options: [], range: range)
-            .compactMap(\.url)
-            .first {
-                ProviderURLSupport.isHTTPURL($0)
-            }
     }
 
     private func cancel() {
@@ -150,13 +137,13 @@ private extension NSItemProvider {
 private enum ShareError: LocalizedError {
     case cancelled
     case missingURL
-    case unsupportedURL
+    case unsupported(String)
 
     var errorDescription: String? {
         switch self {
         case .cancelled: "Adding was cancelled."
-        case .missingURL: "This share does not contain a URL."
-        case .unsupportedURL: "Only secure public HTTPS links can be added."
+        case .missingURL: "This share doesn’t contain a link."
+        case let .unsupported(reason): reason
         }
     }
 }
@@ -215,9 +202,16 @@ private struct ShareStatusView: View {
 
     private var message: String {
         switch model.state {
-        case .adding: "Saving this link at the bottom of your listening queue."
-        case .added: "Metadata will finish resolving in MushRadio."
-        case let .failed(message): message
+        case .adding:
+            "Saving this link at the bottom of your queue."
+        case .added(.webPage):
+            "MushRadio will look for a podcast episode on this page when you open it."
+        case .added(.youtubeVideo), .added(.socialVideo):
+            "The video will be ready when you open MushRadio."
+        case .added:
+            "The episode will be ready when you open MushRadio."
+        case let .failed(message):
+            message
         }
     }
 }

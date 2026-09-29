@@ -1,11 +1,11 @@
 import SwiftUI
 
 struct AddURLView: View {
-    let add: (URL) async -> QueueItem?
+    /// Adds the link and returns right away; the queue row shows progress.
+    let add: (URL) -> Bool
 
     @Environment(\.dismiss) private var dismiss
     @State private var urlString = ""
-    @State private var isAdding = false
     @State private var validationMessage: String?
 
     var body: some View {
@@ -16,11 +16,19 @@ struct AddURLView: View {
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
                         .autocorrectionDisabled()
-                        .accessibilityLabel("Podcast, X video, Instagram video, or YouTube URL")
+                        .accessibilityLabel("Podcast, X video, Instagram video, or YouTube link")
+                        .onChange(of: urlString) { _, _ in
+                            validationMessage = nil
+                        }
+
+                    PasteButton(payloadType: String.self) { strings in
+                        guard let text = strings.first else { return }
+                        urlString = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
                 } header: {
-                    Text("Podcast or Video URL")
+                    Text("Podcast or Video Link")
                 } footer: {
-                    Text("Paste a podcast, X, Instagram, or YouTube link. The Share Sheet is usually faster.")
+                    Text("Podcast episode pages, Apple Podcasts episodes, YouTube, X and Instagram videos. Sharing from another app is quicker: choose “Add to Queue”.")
                 }
 
                 if let validationMessage {
@@ -37,16 +45,8 @@ struct AddURLView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        submit()
-                    } label: {
-                        if isAdding {
-                            ProgressView()
-                        } else {
-                            Text("Add")
-                        }
-                    }
-                    .disabled(isAdding || urlString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Add", action: submit)
+                        .disabled(urlString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
@@ -54,24 +54,18 @@ struct AddURLView: View {
     }
 
     private func submit() {
-        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed),
-              url.scheme?.lowercased() == "https"
-        else {
-            validationMessage = "Enter a complete secure HTTPS URL."
+        guard let url = LinkClassifier.link(fromUserText: urlString) else {
+            validationMessage = "Enter a web link, such as https://example.com/episode."
             return
         }
-
-        isAdding = true
-        validationMessage = nil
-        Task {
-            let item = await add(url)
-            isAdding = false
-            if item == nil {
-                validationMessage = "This link couldn’t be added."
-            } else {
-                dismiss()
-            }
+        if case let .unsupported(reason) = LinkClassifier.classify(url) {
+            validationMessage = reason
+            return
+        }
+        if add(url) {
+            dismiss()
+        } else {
+            validationMessage = "This link couldn’t be added. Try again."
         }
     }
 }

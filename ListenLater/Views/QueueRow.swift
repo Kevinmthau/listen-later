@@ -48,8 +48,12 @@ struct QueueRow: View {
             Label("Fetching details…", systemImage: "clock")
                 .foregroundStyle(.secondary)
         case .unavailable:
-            Label("Unavailable · tap to retry", systemImage: "exclamationmark.circle")
-                .foregroundStyle(.red)
+            Label(
+                item.unavailableReason ?? "Unavailable",
+                systemImage: "exclamationmark.circle"
+            )
+            .foregroundStyle(.red)
+            .lineLimit(2)
         case .ready:
             if isCurrent {
                 Text(nowPlayingStatus)
