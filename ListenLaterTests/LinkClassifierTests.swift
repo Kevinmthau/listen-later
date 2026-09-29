@@ -23,6 +23,15 @@ final class LinkClassifierTests: XCTestCase {
         )
         XCTAssertEqual(kind("https://cdn.example.com/episode.mp3"), .audioFile)
         XCTAssertEqual(kind("https://www.example.com/episodes/42"), .webPage)
+        // Spotify-hosted RSS shows have ordinary episode pages.
+        XCTAssertEqual(
+            kind("https://podcasters.spotify.com/pod/show/example/episodes/Pilot-e1abc"),
+            .webPage
+        )
+        XCTAssertEqual(
+            kind("https://creators.spotify.com/pod/show/example/episodes/Pilot-e1abc"),
+            .webPage
+        )
     }
 
     func testRejectsLinksThatCannotPlayWithAReason() {
@@ -64,6 +73,22 @@ final class LinkClassifierTests: XCTestCase {
         )
         XCTAssertNil(LinkClassifier.link(fromUserText: ""))
         XCTAssertNil(LinkClassifier.link(fromUserText: "not a link"))
+    }
+
+    func testPrefersTheExplicitHTTPSLinkInSharedText() {
+        XCTAssertEqual(
+            LinkClassifier.link(fromUserText: "Via NPR.org https://n.pr/3xYz")?.absoluteString,
+            "https://n.pr/3xYz"
+        )
+        XCTAssertEqual(
+            LinkClassifier.link(fromUserText: "Listen at example.com/ep/42 today")?.absoluteString,
+            "https://example.com/ep/42"
+        )
+        XCTAssertEqual(
+            LinkClassifier.link(fromUserText: "Old link: http://example.com/a")?.absoluteString,
+            "http://example.com/a",
+            "An http link is still returned, so the classifier can say why it's refused."
+        )
     }
 
     func testErrorMessagesDoNotRepeatURLs() {

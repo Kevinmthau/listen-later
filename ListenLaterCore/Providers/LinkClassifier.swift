@@ -44,7 +44,12 @@ enum LinkClassifier {
         if isLikelyAudioURL(url) {
             return .audioFile
         }
-        if host.matchesDomain(in: ["spotify.com", "spotify.link", "spoti.fi"]) {
+        // Spotify's player and share links only. Other spotify.com hosts,
+        // such as podcasters.spotify.com episode pages, belong to RSS shows
+        // and are searched like any web page.
+        if host.matchesDomain(in: [
+            "open.spotify.com", "play.spotify.com", "spotify.link", "spotify.app.link", "spoti.fi",
+        ]) {
             return .unsupported(
                 "Spotify episodes can only play in Spotify. Share the episode from Apple Podcasts or the show’s website instead."
             )
@@ -64,7 +69,10 @@ enum LinkClassifier {
 
     /// Turns typed, pasted or shared text into a link: a bare
     /// "example.com/episode" gets https://, and a link inside a sentence is
-    /// found. Returns nil when the text holds no web link.
+    /// found. Within text, an explicit https:// link wins over a bare domain,
+    /// which wins over an http:// link: shared text often names a site
+    /// ("Via NPR.org") before the real link. Returns nil when the text holds
+    /// no web link.
     static func link(fromUserText text: String) -> URL? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -92,10 +100,29 @@ enum LinkClassifier {
             return nil
         }
         let range = NSRange(trimmed.startIndex..<trimmed.endIndex, in: trimmed)
-        return detector
-            .matches(in: trimmed, options: [], range: range)
-            .compactMap(\.url)
-            .first { ["https", "http"].contains($0.scheme?.lowercased() ?? "") }
+        var explicitHTTPS: URL?
+        var bareDomain: URL?
+        var explicitHTTP: URL?
+        for match in detector.matches(in: trimmed, options: [], range: range) {
+            guard let url = match.url,
+                  ["https", "http"].contains(url.scheme?.lowercased() ?? ""),
+                  let matchRange = Range(match.range, in: trimmed)
+            else {
+                continue
+            }
+            let matched = String(trimmed[matchRange])
+            let lowercased = matched.lowercased()
+            if lowercased.hasPrefix("https://") {
+                explicitHTTPS = explicitHTTPS ?? url
+            } else if lowercased.hasPrefix("http://") {
+                explicitHTTP = explicitHTTP ?? url
+            } else if !matched.contains("://") {
+                // The detector gives a bare domain http://; upgrade it, as
+                // for a bare link above.
+                bareDomain = bareDomain ?? URL(string: "https://\(matched)")
+            }
+        }
+        return explicitHTTPS ?? bareDomain ?? explicitHTTP
     }
 }
 
