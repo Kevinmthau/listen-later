@@ -616,6 +616,27 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(harness.coordinator.transportState, .playing)
     }
 
+    func testEndOfItemSleepTimerInTheBackgroundKeepsQueueOrder() throws {
+        let harness = try makeHarness()
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let video = appendSocialVideo(to: harness.queue, ordinal: 2)
+        let second = appendPodcast(to: harness.queue, ordinal: 3, duration: 600)
+        harness.coordinator.start(first)
+        harness.coordinator.sceneWillResignActive()
+        harness.coordinator.setSleepTimerAtEndOfItem()
+
+        harness.engine.emit(.ended)
+
+        XCTAssertEqual(harness.coordinator.currentItemID, video.id)
+        XCTAssertEqual(harness.coordinator.transportState, .paused)
+        XCTAssertEqual(
+            harness.queue.items.filter { !$0.isInPlayedSection }.map(\.id),
+            [video.id, second.id],
+            "Nothing autoplays, so the later podcast doesn't jump the video."
+        )
+        XCTAssertEqual(harness.coordinator.notice, "Paused by the sleep timer.")
+    }
+
     func testRemoteNextInTheBackgroundPrefersAudio() throws {
         let harness = try makeHarness()
         let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)

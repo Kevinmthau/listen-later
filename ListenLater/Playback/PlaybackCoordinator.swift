@@ -775,7 +775,13 @@ final class PlaybackCoordinator {
     /// a sleep timer holds playback, the next item is left paused and shows
     /// the timer's notice.
     private func advance(from item: QueueItem) {
-        guard let next = nextUnplayedItem(after: item) else {
+        // Nothing autoplays while the timer holds playback, so leave the
+        // immediate next item ready, video or not, instead of reaching past
+        // videos for audio and moving it ahead of them.
+        let replacement = sleepTimerHoldsPlayback
+            ? queue.firstUnplayed(excluding: item.id)
+            : nextUnplayedItem(after: item)
+        guard let next = replacement else {
             finishQueue()
             return
         }
