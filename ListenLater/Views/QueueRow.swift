@@ -10,38 +10,59 @@ struct QueueRow: View {
 
     @AppStorage(PlaybackPreferences.videosWaitForScreenKey)
     private var videosWaitForScreen = true
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(spacing: 12) {
+        // At accessibility text sizes the artwork sits above the text so
+        // titles get the full width instead of a narrow column.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(spacing: 12))
+        layout {
             QueueThumbnail(item: item, nowPlaying: nowPlaying)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(item.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(item.isInPlayedSection ? .secondary : .primary)
-                    .lineLimit(2)
-
-                HStack(spacing: 6) {
-                    Label(item.sourceName, systemImage: item.source.symbolName)
-                    if !item.subtitle.isEmpty {
-                        Text("·")
-                        Text(item.subtitle)
-                            .lineLimit(1)
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                statusLine
-                    .font(.caption2)
-            }
-
-            Spacer(minLength: 0)
+            details
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 5)
         .opacity(item.isInPlayedSection ? 0.72 : 1)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint(accessibilityHint)
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(item.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(item.isInPlayedSection ? .secondary : .primary)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
+
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label(item.sourceName, systemImage: item.source.symbolName)
+                        if !item.subtitle.isEmpty {
+                            Text(item.subtitle)
+                        }
+                    }
+                } else {
+                    HStack(spacing: 6) {
+                        Label(item.sourceName, systemImage: item.source.symbolName)
+                        if !item.subtitle.isEmpty {
+                            Text("·")
+                            Text(item.subtitle)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            statusLine
+                .font(.caption)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -56,7 +77,7 @@ struct QueueRow: View {
                 systemImage: "exclamationmark.circle"
             )
             .foregroundStyle(.red)
-            .lineLimit(2)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
         case .ready:
             if isCurrent {
                 Text(nowPlayingStatus)
@@ -65,7 +86,7 @@ struct QueueRow: View {
                 Label("Played", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
             } else if item.hasMeaningfulProgress, item.source != .youtube {
-                Text("\(item.playbackPosition.queueTimestamp) \(progressVerb) · \(item.remainingDuration.queueCompactDuration) left")
+                Text(progressStatus)
                     .foregroundStyle(.secondary)
             } else if needsScreen {
                 // YouTube can't play hidden, and other videos wait while the
@@ -76,6 +97,30 @@ struct QueueRow: View {
                 Text(item.duration.queueCompactDuration)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    /// The same status the row shows, as words for VoiceOver.
+    private var statusDescription: String? {
+        switch item.status {
+        case .resolving:
+            return "Fetching details"
+        case .unavailable:
+            return item.unavailableReason ?? "Unavailable"
+        case .ready:
+            if isCurrent {
+                return nowPlayingStatus
+            }
+            if item.isInPlayedSection {
+                return "Played"
+            }
+            if item.hasMeaningfulProgress, item.source != .youtube {
+                return progressStatus
+            }
+            if needsScreen {
+                return needsScreenStatus
+            }
+            return item.duration > 0 ? item.duration.queueCompactDuration : nil
         }
     }
 
@@ -93,8 +138,9 @@ struct QueueRow: View {
         return "\(item.duration.queueCompactDuration) · Needs screen"
     }
 
-    private var progressVerb: String {
-        item.source.isVideo ? "watched" : "listened"
+    private var progressStatus: String {
+        let verb = item.source.isVideo ? "watched" : "listened"
+        return "\(item.playbackPosition.queueTimestamp) \(verb) · \(item.remainingDuration.queueCompactDuration) left"
     }
 
     private var nowPlayingStatus: String {
@@ -106,17 +152,19 @@ struct QueueRow: View {
     }
 
     private var accessibilityLabel: String {
-        var components = [item.title, item.subtitle, item.sourceName]
-        if isCurrent {
-            components.append(isPlaying ? "Now playing" : "Paused")
-        }
-        if item.isInPlayedSection {
-            components.append("Played")
-        }
+        [item.title, item.subtitle, item.sourceName, statusDescription ?? ""]
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+    }
+
+    private var accessibilityHint: String {
         if item.status == .unavailable {
-            components.append(item.unavailableReason ?? "Unavailable")
+            return "Shows why it can’t play and what you can do."
         }
-        return components.filter { !$0.isEmpty }.joined(separator: ", ")
+        if isCurrent {
+            return isPlaying ? "Pauses playback." : "Resumes playback."
+        }
+        return "Plays it now."
     }
 }
 

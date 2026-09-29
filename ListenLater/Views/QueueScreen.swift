@@ -306,14 +306,18 @@ struct QueueScreen: View {
     }
 
     private func queueRow(_ item: QueueItem) -> some View {
-        QueueRow(
-            item: item,
-            isCurrent: model.playback.currentItemID == item.id,
-            isPlaying: model.playback.currentItemID == item.id
-                && model.playback.transportState.isPlaying
-        )
-        .contentShape(Rectangle())
-        .onTapGesture { select(item) }
+        // A real button: VoiceOver announces it as one, and the row
+        // highlights while pressed.
+        Button {
+            select(item)
+        } label: {
+            QueueRow(
+                item: item,
+                isCurrent: model.playback.currentItemID == item.id,
+                isPlaying: model.playback.currentItemID == item.id
+                    && model.playback.transportState.isPlaying
+            )
+        }
         .listRowBackground(
             model.playback.currentItemID == item.id
                 ? Palette.playingRow
@@ -463,6 +467,7 @@ struct QueueScreen: View {
         withAnimation(.snappy) {
             toast = newToast
         }
+        AccessibilityNotification.Announcement(newToast.message).post()
     }
 
     private func dismissToast() {

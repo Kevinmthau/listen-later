@@ -12,6 +12,7 @@ struct NowPlayingCard: View {
     let onMinimize: (() -> Void)?
 
     @Environment(\.openURL) private var openURL
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var scrubPosition: TimeInterval = 0
     @State private var isScrubbing = false
     @State private var videoAspectRatio: CGFloat = 16.0 / 9.0
@@ -118,6 +119,7 @@ struct NowPlayingCard: View {
                 .accessibilityIdentifier("minimize-player-button")
             }
         }
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
     }
 
     private func titleBlock(_ item: QueueItem) -> some View {
@@ -148,6 +150,19 @@ struct NowPlayingCard: View {
                 }
             )
             .accessibilityLabel("Playback position")
+            .accessibilityValue(positionDescription)
+            // Swiping up or down skips like the buttons, instead of moving
+            // the slider by a percentage.
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment:
+                    playback.skipForward()
+                case .decrement:
+                    playback.skipBack()
+                @unknown default:
+                    break
+                }
+            }
 
             HStack {
                 Text((isScrubbing ? scrubPosition : playback.position).queueTimestamp)
@@ -216,6 +231,22 @@ struct NowPlayingCard: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
+        // Glyphs past this size overflow their 44 pt slots without being
+        // easier to use; VoiceOver labels carry the meaning.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    }
+
+    private var positionDescription: String {
+        let elapsed = spokenDuration(isScrubbing ? scrubPosition : playback.position)
+        guard playback.duration > 0 else { return elapsed }
+        return "\(elapsed) of \(spokenDuration(playback.duration))"
+    }
+
+    private func spokenDuration(_ seconds: TimeInterval) -> String {
+        let whole = seconds.isFinite ? max(0, seconds.rounded()) : 0
+        return Duration.seconds(whole).formatted(
+            .units(allowed: [.hours, .minutes, .seconds], width: .wide)
+        )
     }
 
     private var speedMenu: some View {
@@ -389,8 +420,12 @@ struct NowPlayingCard: View {
 
     private var idleContent: some View {
         let hasUnplayed = queue.firstUnplayed() != nil
+        // At accessibility text sizes the message gets the full width.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 15))
         return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 15) {
+            layout {
                 ZStack {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .fill(
@@ -422,7 +457,9 @@ struct NowPlayingCard: View {
                     .foregroundStyle(.secondary)
                 }
 
-                Spacer(minLength: 6)
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Spacer(minLength: 6)
+                }
 
                 Button {
                     playback.playOrPause()
