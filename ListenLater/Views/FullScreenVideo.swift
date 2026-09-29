@@ -33,10 +33,21 @@ enum FullScreenVideo {
     }
 
     /// Closes the full-screen player, e.g. when the queue moves on to
-    /// something that isn't a native video.
+    /// something that isn't a native video. A player that has gone to
+    /// Picture in Picture is no longer presented, and is left alone.
     static func dismiss() {
-        guard let controller = presented, !controller.isBeingDismissed else { return }
-        controller.dismiss(animated: true) {
+        guard let controller = presented,
+              let presenter = controller.presentingViewController,
+              !controller.isBeingDismissed
+        else {
+            return
+        }
+        // Let go of the shared player first: it is already playing the next
+        // item, and closing the system player can pause its player.
+        controller.player = nil
+        // From the presenter, so a menu or route picker the player has
+        // open closes with it.
+        presenter.dismiss(animated: true) {
             didEnd()
         }
     }
@@ -64,6 +75,20 @@ enum FullScreenVideo {
 }
 
 private final class FullScreenVideoDelegate: NSObject, AVPlayerViewControllerDelegate {
+    // Picture in Picture started from the full-screen player puts the
+    // video on screen too, as it does from the inline one.
+    func playerViewControllerDidStartPictureInPicture(
+        _ playerViewController: AVPlayerViewController
+    ) {
+        NotificationCenter.default.post(name: .pictureInPictureDidStart, object: nil)
+    }
+
+    func playerViewControllerDidStopPictureInPicture(
+        _ playerViewController: AVPlayerViewController
+    ) {
+        NotificationCenter.default.post(name: .pictureInPictureDidStop, object: nil)
+    }
+
     func playerViewController(
         _ playerViewController: AVPlayerViewController,
         willEndFullScreenPresentationWithAnimationCoordinator coordinator: UIViewControllerTransitionCoordinator

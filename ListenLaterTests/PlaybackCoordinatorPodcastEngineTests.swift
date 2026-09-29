@@ -1079,6 +1079,30 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(harness.coordinator.transportState, .playing)
     }
 
+    func testAPauseRightAfterPlayIsNotMistakenForOutsideControl() async throws {
+        let engine = AVPlayerPodcastEngine(playbackWatchdogDelay: {
+            try await Task.sleep(for: .seconds(60))
+        })
+        var events: [PodcastPlaybackEvent] = []
+        engine.eventHandler = { _, event in events.append(event) }
+        engine.load(
+            url: URL(string: "https://192.0.2.1/podcast.mp3")!,
+            position: 0,
+            rate: 1,
+            loadID: UUID()
+        )
+
+        // Status changes reach the engine after a hop to the main actor,
+        // by which time the app has paused again.
+        engine.play()
+        engine.pause()
+        try await Task.sleep(for: .milliseconds(200))
+
+        XCTAssertFalse(events.contains(.resumedExternally))
+        XCTAssertFalse(events.contains(.pausedExternally))
+        engine.tearDown()
+    }
+
     func testPodcastWatchdogFailsAPlaybackThatNeverStarts() async {
         let failure = expectation(description: "Playback watchdog failure")
         let engine = AVPlayerPodcastEngine(playbackWatchdogDelay: {})

@@ -19,6 +19,10 @@ struct NativeVideoPlayerView: UIViewRepresentable {
         view.onVideoSizeChange = onVideoSizeChange
         view.player = player
     }
+
+    static func dismantleUIView(_ view: PlayerLayerView, coordinator: ()) {
+        view.endPictureInPicture()
+    }
 }
 
 extension Notification.Name {
@@ -95,6 +99,17 @@ final class PlayerLayerView: UIView, AVPictureInPictureControllerDelegate {
     nonisolated func pictureInPictureControllerDidStopPictureInPicture(
         _ pictureInPictureController: AVPictureInPictureController
     ) {
+        NotificationCenter.default.post(name: .pictureInPictureDidStop, object: nil)
+    }
+
+    /// SwiftUI is removing this view, e.g. because the queue moved on to
+    /// audio, and its Picture in Picture controller goes with it. PiP then
+    /// closes without telling the delegate, so report it here.
+    func endPictureInPicture() {
+        guard let pictureInPicture, pictureInPicture.isPictureInPictureActive else {
+            return
+        }
+        pictureInPicture.stopPictureInPicture()
         NotificationCenter.default.post(name: .pictureInPictureDidStop, object: nil)
     }
 
