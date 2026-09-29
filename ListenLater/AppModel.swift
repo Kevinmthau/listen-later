@@ -74,8 +74,10 @@ final class AppModel {
             beginQueueObservation()
         }
         queue.refresh()
-        playback.reconcileQueueState()
+        // Foreground first, so anything reconciling starts uses the
+        // on-screen rules rather than the locked-phone ones.
         playback.sceneDidBecomeActive()
+        playback.reconcileQueueState()
         guard !isDemoMode else { return }
         await queue.resumePendingResolutions()
         await queue.importPendingShares()
