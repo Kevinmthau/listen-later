@@ -28,19 +28,7 @@ final class PlaybackPreferencesTests: XCTestCase {
         XCTAssertFalse(PlaybackPreferences.clipsPlayContinuously(in: defaults))
     }
 
-    func testAnOldChoiceToSaveVideosForTheScreenStillHoldsClips() {
-        defaults.set(true, forKey: PlaybackPreferences.legacyVideosWaitForScreenKey)
-
-        XCTAssertFalse(PlaybackPreferences.clipsPlayContinuously(in: defaults))
-    }
-
-    func testAnOldChoiceToPlayVideosWhileLockedKeepsPlayingClips() {
-        defaults.set(false, forKey: PlaybackPreferences.legacyVideosWaitForScreenKey)
-
-        XCTAssertTrue(PlaybackPreferences.clipsPlayContinuously(in: defaults))
-    }
-
-    func testMigrationMovesAnOldChoiceToTheCurrentKey() {
+    func testMigrationCarriesAnOldChoiceToSaveVideosForTheScreen() {
         defaults.set(true, forKey: PlaybackPreferences.legacyVideosWaitForScreenKey)
 
         PlaybackPreferences.migrate(in: defaults)
@@ -49,8 +37,30 @@ final class PlaybackPreferencesTests: XCTestCase {
             defaults.object(forKey: PlaybackPreferences.clipsPlayContinuouslyKey) as? Bool,
             false
         )
-        XCTAssertNil(defaults.object(forKey: PlaybackPreferences.legacyVideosWaitForScreenKey))
         XCTAssertFalse(PlaybackPreferences.clipsPlayContinuously(in: defaults))
+    }
+
+    func testMigrationCarriesAnOldChoiceToPlayVideosWhileLocked() {
+        defaults.set(false, forKey: PlaybackPreferences.legacyVideosWaitForScreenKey)
+
+        PlaybackPreferences.migrate(in: defaults)
+
+        XCTAssertEqual(
+            defaults.object(forKey: PlaybackPreferences.clipsPlayContinuouslyKey) as? Bool,
+            true
+        )
+        XCTAssertTrue(PlaybackPreferences.clipsPlayContinuously(in: defaults))
+    }
+
+    func testMigrationKeepsTheOldKeyForEarlierBuilds() {
+        defaults.set(true, forKey: PlaybackPreferences.legacyVideosWaitForScreenKey)
+
+        PlaybackPreferences.migrate(in: defaults)
+
+        XCTAssertEqual(
+            defaults.object(forKey: PlaybackPreferences.legacyVideosWaitForScreenKey) as? Bool,
+            true
+        )
     }
 
     func testMigrationLeavesACurrentChoiceAlone() {

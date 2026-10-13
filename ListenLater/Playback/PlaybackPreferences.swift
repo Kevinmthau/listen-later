@@ -14,24 +14,14 @@ enum PlaybackPreferences {
     /// and leave clips in Up Next for when the user can watch them. On
     /// unless the user turns it off.
     static func clipsPlayContinuously(in defaults: UserDefaults = .standard) -> Bool {
-        if let stored = defaults.object(forKey: clipsPlayContinuouslyKey) as? Bool {
-            return stored
-        }
-        if let heldVideos = defaults.object(forKey: legacyVideosWaitForScreenKey) as? Bool {
-            return !heldVideos
-        }
-        return true
+        defaults.object(forKey: clipsPlayContinuouslyKey) as? Bool ?? true
     }
 
-    /// Whether automatic advances made in the background leave videos in Up
-    /// Next; what the player's on-screen rule reads.
-    static var videosWaitForScreen: Bool {
-        !clipsPlayContinuously()
-    }
-
-    /// Moves a choice made under the old "Save Videos for the Screen"
-    /// setting to the current key, so Settings shows it. A value already
-    /// stored under the current key wins.
+    /// Copies a choice made under the old "Save Videos for the Screen"
+    /// setting to the current key, so Settings and every reader see it. Runs
+    /// before anything reads the setting. A value already stored under the
+    /// current key wins. The old key is left in place so an earlier build
+    /// still finds the choice.
     static func migrate(in defaults: UserDefaults = .standard) {
         guard defaults.object(forKey: clipsPlayContinuouslyKey) == nil,
               let heldVideos = defaults.object(forKey: legacyVideosWaitForScreenKey) as? Bool
@@ -39,6 +29,5 @@ enum PlaybackPreferences {
             return
         }
         defaults.set(!heldVideos, forKey: clipsPlayContinuouslyKey)
-        defaults.removeObject(forKey: legacyVideosWaitForScreenKey)
     }
 }

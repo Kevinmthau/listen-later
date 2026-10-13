@@ -683,8 +683,8 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertFalse(video.isPlayed)
     }
 
-    func testBackgroundAdvancePlaysVideosWhenTheyDontWaitForTheScreen() throws {
-        let harness = try makeHarness(videosWaitForScreen: false)
+    func testBackgroundAdvancePlaysVideosWithContinuousPlay() throws {
+        let harness = try makeHarness(clipsPlayContinuously: true)
         let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
         let video = appendSocialVideo(to: harness.queue, ordinal: 2)
         let second = appendPodcast(to: harness.queue, ordinal: 3, duration: 600)
@@ -699,7 +699,7 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
     }
 
     func testClipsPlayOneAfterAnotherInTheBackgroundWithContinuousPlay() throws {
-        let harness = try makeHarness(videosWaitForScreen: false)
+        let harness = try makeHarness(clipsPlayContinuously: true)
         let first = appendSocialVideo(to: harness.queue, ordinal: 1)
         let second = appendSocialVideo(to: harness.queue, ordinal: 2)
         harness.coordinator.start(first)
@@ -1279,7 +1279,7 @@ private extension PlaybackCoordinatorPodcastEngineTests {
         sleepTimerDelay: @escaping @Sendable (TimeInterval) async throws -> Void = {
             try await Task.sleep(for: .seconds($0))
         },
-        videosWaitForScreen: Bool = true,
+        clipsPlayContinuously: Bool = false,
         providers: [any MediaProvider] = []
     ) throws -> Harness {
         let persistence = try PersistenceController.makeContainer(inMemory: true)
@@ -1294,7 +1294,7 @@ private extension PlaybackCoordinatorPodcastEngineTests {
             podcastEngine: engine,
             youtubePlayer: youtubePlayer,
             sleepTimerDelay: sleepTimerDelay,
-            videosWaitForScreen: { videosWaitForScreen }
+            clipsPlayContinuously: { clipsPlayContinuously }
         )
         return Harness(
             container: persistence.container,

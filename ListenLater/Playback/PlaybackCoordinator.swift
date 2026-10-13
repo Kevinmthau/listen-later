@@ -99,7 +99,7 @@ final class PlaybackCoordinator {
     @ObservationIgnored private let podcastEngine: PodcastPlaybackEngine
     @ObservationIgnored private let audioSession: AVAudioSession
     @ObservationIgnored private let sleepTimerDelay: @Sendable (TimeInterval) async throws -> Void
-    @ObservationIgnored private let videosWaitForScreen: () -> Bool
+    @ObservationIgnored private let clipsPlayContinuously: () -> Bool
     @ObservationIgnored private var sleepTimerTask: Task<Void, Never>?
     /// When each item's link was last prefetched. A failing resolver, or a
     /// link that expires within a minute or two, is asked again only after
@@ -172,8 +172,8 @@ final class PlaybackCoordinator {
         sleepTimerDelay: @escaping @Sendable (TimeInterval) async throws -> Void = {
             try await Task.sleep(for: .seconds($0))
         },
-        videosWaitForScreen: @escaping () -> Bool = {
-            PlaybackPreferences.videosWaitForScreen
+        clipsPlayContinuously: @escaping () -> Bool = {
+            PlaybackPreferences.clipsPlayContinuously()
         }
     ) {
         let podcastEngine = podcastEngine ?? AVPlayerPodcastEngine()
@@ -183,7 +183,7 @@ final class PlaybackCoordinator {
         self.youtubePlayer = youtubePlayer
         self.audioSession = audioSession ?? .sharedInstance()
         self.sleepTimerDelay = sleepTimerDelay
-        self.videosWaitForScreen = videosWaitForScreen
+        self.clipsPlayContinuously = clipsPlayContinuously
 
         podcastEngine.eventHandler = { [weak self] loadID, event in
             self?.handlePodcastEvent(loadID: loadID, event: event)
@@ -987,7 +987,7 @@ final class PlaybackCoordinator {
     }
 
     /// The first playable item other than `excludedID`. In the background,
-    /// when videos wait for the screen, audio further down Up Next comes
+    /// with continuous play for clips off, audio further down Up Next comes
     /// first; a video is only chosen when no audio is left, and then it
     /// waits rather than playing.
     private func nextItem(excluding excludedID: UUID?) -> QueueItem? {
@@ -1000,10 +1000,10 @@ final class PlaybackCoordinator {
     }
 
     /// Nobody can see a video: the app isn't on screen and no Picture in
-    /// Picture window is showing one, and the user saves videos for the
-    /// screen.
+    /// Picture window is showing one, and the user has turned off continuous
+    /// play for clips.
     private var videosMustWait: Bool {
-        !isForeground && !isPictureInPictureActive && videosWaitForScreen()
+        !isForeground && !isPictureInPictureActive && !clipsPlayContinuously()
     }
 
     private func finishQueue(notice finalNotice: String = "Queue finished.") {
