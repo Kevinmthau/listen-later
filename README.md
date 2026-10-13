@@ -87,10 +87,13 @@ MushRadio therefore behaves as follows:
 - Leaving the app, locking the device, or moving the player off screen pauses
   YouTube playback. The app clears Now Playing information and disables
   lock-screen/Bluetooth remote commands for YouTube.
-- If a podcast finishes while the device is locked, the queue skips over
-  videos to the next podcast and leaves the videos in Up Next (the default
-  **Save Videos for the Screen** setting). When only videos remain, it waits
-  for the app to return to the foreground.
+- While the device is locked or the app is in the background, X and
+  Instagram clips keep playing one after another as audio and are marked
+  played when they end (the default **Continuous Play for Clips** setting).
+  With it off, a podcast that finishes while locked skips over videos to the
+  next podcast and leaves the videos in Up Next; when only videos remain, the
+  queue waits for the app to return to the foreground. YouTube videos always
+  wait for the screen.
 - Foreground auto-advance is attempted only while the player is visible.
   WebKit/YouTube may still block autoplay; the app then asks the user to tap
   Play.
@@ -390,11 +393,12 @@ vertical reel is tall and narrow), has a full-screen button that opens the
 system player (which may rotate to landscape and offers Picture in Picture and
 AirPlay), and continues in Picture in Picture when you leave the app while it
 plays. By
-default, automatic advances made in the background don't start videos: the
-queue plays the next podcast and leaves videos in Up Next, and a video that is
-reached with no audio left is loaded but paused. Turning off **Save Videos for
-the Screen** in Settings lets X and Instagram videos play as audio while
-locked. Rows for videos that will wait show **Needs screen**.
+default, **Continuous Play for Clips** is on: automatic advances made in the
+background play X and Instagram clips as audio, one after another, and mark
+them played when they end. Turning it off in Settings saves clips for the
+screen instead: the queue plays the next podcast and leaves videos in Up Next,
+and a video that is reached with no audio left is loaded but paused. Rows for
+videos that will wait show **Needs screen**.
 Do not enable or simulate background YouTube playback. See Apple’s
 [AVAudioSession guidance](https://developer.apple.com/documentation/avfaudio/avaudiosession)
 and [background execution modes](https://developer.apple.com/documentation/xcode/configuring-background-execution-modes).
