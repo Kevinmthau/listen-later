@@ -698,6 +698,23 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(harness.coordinator.transportState, .playing)
     }
 
+    func testClipsPlayOneAfterAnotherInTheBackgroundWithContinuousPlay() throws {
+        let harness = try makeHarness(videosWaitForScreen: false)
+        let first = appendSocialVideo(to: harness.queue, ordinal: 1)
+        let second = appendSocialVideo(to: harness.queue, ordinal: 2)
+        harness.coordinator.start(first)
+        harness.coordinator.sceneWillResignActive()
+
+        harness.engine.emit(.ended)
+
+        XCTAssertTrue(first.isPlayed)
+        XCTAssertEqual(harness.coordinator.currentItemID, second.id)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+        XCTAssertEqual(harness.engine.loads.last?.url, second.playbackURL)
+        XCTAssertEqual(harness.engine.playCallCount, 2)
+        XCTAssertNil(harness.coordinator.notice)
+    }
+
     func testEndOfItemSleepTimerInTheBackgroundKeepsQueueOrder() throws {
         let harness = try makeHarness()
         let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)

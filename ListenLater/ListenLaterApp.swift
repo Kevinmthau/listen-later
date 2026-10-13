@@ -10,6 +10,7 @@ struct ListenLaterApp: App {
     @State private var model: AppModel
 
     init() {
+        PlaybackPreferences.migrate()
         let isDemoMode = ProcessInfo.processInfo.arguments.contains("-DemoQueue")
         // Unit tests run inside this app; keep them away from the real store
         // and the user's iCloud data. Tests build their own containers.

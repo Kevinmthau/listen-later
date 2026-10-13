@@ -10,23 +10,23 @@ struct SettingsView: View {
     let lastFailure: String?
 
     @Environment(\.dismiss) private var dismiss
-    @AppStorage(PlaybackPreferences.videosWaitForScreenKey)
-    private var videosWaitForScreen = true
+    @AppStorage(PlaybackPreferences.clipsPlayContinuouslyKey)
+    private var clipsPlayContinuously = true
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    Toggle(isOn: $videosWaitForScreen) {
-                        Label("Save Videos for the Screen", systemImage: "iphone")
+                    Toggle(isOn: $clipsPlayContinuously) {
+                        Label("Continuous Play for Clips", systemImage: "play.square.stack")
                     }
                 } header: {
                     Text("When Locked")
                 } footer: {
                     Text(
-                        videosWaitForScreen
-                            ? "While your iPhone is locked or MushRadio is in the background, the queue plays podcasts and leaves videos in Up Next for when you can watch them."
-                            : "While your iPhone is locked, X and Instagram videos play as audio and are marked played when they end."
+                        clipsPlayContinuously
+                            ? "While your iPhone is locked or MushRadio is in the background, X and Instagram clips keep playing one after another as audio, and are marked played when they end."
+                            : "While your iPhone is locked or MushRadio is in the background, the queue plays podcasts and leaves X and Instagram clips in Up Next for when you can watch them."
                     )
                 }
 

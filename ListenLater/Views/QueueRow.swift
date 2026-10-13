@@ -8,8 +8,8 @@ struct QueueRow: View {
     /// What playback is doing, for the current item only.
     let activity: PlaybackActivity?
 
-    @AppStorage(PlaybackPreferences.videosWaitForScreenKey)
-    private var videosWaitForScreen = true
+    @AppStorage(PlaybackPreferences.clipsPlayContinuouslyKey)
+    private var clipsPlayContinuously = true
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -130,7 +130,7 @@ struct QueueRow: View {
     }
 
     private var needsScreen: Bool {
-        item.source == .youtube || (item.source.isVideo && videosWaitForScreen)
+        item.source == .youtube || (item.source.isVideo && !clipsPlayContinuously)
     }
 
     private var needsScreenStatus: String {
