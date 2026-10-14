@@ -40,7 +40,7 @@ struct SettingsView: View {
                         systemImage: "play.square.stack"
                     )
                     Label(
-                        "YouTube videos use the official visible player and pause when this app is not on screen.",
+                        "Verified YouTube videos use the official visible player; other videos open in YouTube.",
                         systemImage: "play.rectangle"
                     )
                 }
@@ -58,7 +58,10 @@ struct SettingsView: View {
 
                 Section {
                     DisclosureGroup("Diagnostics") {
-                        LabeledContent("YouTube API key", value: youtubeIsConfigured ? "Set" : "Missing")
+                        LabeledContent(
+                            "YouTube Data API key",
+                            value: youtubeIsConfigured ? "Set" : "Open-in-YouTube mode"
+                        )
                         LabeledContent(
                             "Video resolver token",
                             value: videoGrabberIsConfigured ? "Set" : "Missing"

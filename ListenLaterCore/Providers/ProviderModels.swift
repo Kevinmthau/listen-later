@@ -56,6 +56,35 @@ struct ProviderResolvedItem: Hashable, Codable, Sendable {
     let source: ProviderSource
     let playback: ProviderPlaybackReference
     let isMadeForKids: Bool
+    /// True when embedding is unavailable or its required status checks could
+    /// not be completed. Made For Kids is represented separately above.
+    let requiresOfficialYouTubeApp: Bool
+
+    init(
+        originalURL: URL,
+        canonicalURL: URL,
+        title: String,
+        creatorName: String?,
+        artworkURL: URL?,
+        duration: TimeInterval?,
+        publishedAt: Date?,
+        source: ProviderSource,
+        playback: ProviderPlaybackReference,
+        isMadeForKids: Bool,
+        requiresOfficialYouTubeApp: Bool = false
+    ) {
+        self.originalURL = originalURL
+        self.canonicalURL = canonicalURL
+        self.title = title
+        self.creatorName = creatorName
+        self.artworkURL = artworkURL
+        self.duration = duration
+        self.publishedAt = publishedAt
+        self.source = source
+        self.playback = playback
+        self.isMadeForKids = isMadeForKids
+        self.requiresOfficialYouTubeApp = requiresOfficialYouTubeApp
+    }
 }
 
 protocol MediaProvider: Sendable {
@@ -68,7 +97,6 @@ protocol MediaProvider: Sendable {
 enum ProviderResolutionError: Error, Equatable, Sendable {
     case invalidURL(URL)
     case unsupportedURL(URL)
-    case missingYouTubeAPIKey
     case invalidYouTubeVideoURL(URL)
     case invalidSocialVideoURL(URL)
     case videoGrabberUnauthorized
@@ -93,8 +121,6 @@ extension ProviderResolutionError: LocalizedError {
             "MushRadio only supports public https:// links."
         case .unsupportedURL:
             "MushRadio doesn’t support this kind of link."
-        case .missingYouTubeAPIKey:
-            "YouTube isn’t set up in this build of MushRadio."
         case .invalidYouTubeVideoURL:
             "This YouTube link doesn’t point to a video."
         case .invalidSocialVideoURL:

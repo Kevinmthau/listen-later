@@ -559,7 +559,7 @@ struct NowPlayingCard: View {
 
     private func youtubeSurface(_ item: QueueItem) -> some View {
         Group {
-            if item.youtubeMadeForKids {
+            if item.requiresYouTubeApp {
                 ArtworkView(url: item.artworkURL, source: .youtube, size: 112)
                     .padding(.vertical, 4)
             } else {

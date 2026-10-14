@@ -86,7 +86,9 @@ struct ProviderRegistry: Sendable {
             publishedAt: resolved.publishedAt,
             source: resolved.source,
             playback: playback,
-            isMadeForKids: resolved.isMadeForKids
+            isMadeForKids: resolved.isMadeForKids,
+            requiresOfficialYouTubeApp:
+                resolved.requiresOfficialYouTubeApp
         )
     }
 }

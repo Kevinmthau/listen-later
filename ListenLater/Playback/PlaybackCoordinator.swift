@@ -281,7 +281,7 @@ final class PlaybackCoordinator {
                 notice = "Open MushRadio to play this YouTube video."
                 return
             }
-            if item.youtubeMadeForKids {
+            if item.requiresYouTubeApp {
                 transportState = .requiresYouTubeApp
                 return
             }
@@ -708,9 +708,11 @@ final class PlaybackCoordinator {
             notice = "Open MushRadio to play this YouTube video."
             return
         }
-        guard !item.youtubeMadeForKids else {
+        guard !item.requiresYouTubeApp else {
             transportState = .requiresYouTubeApp
-            notice = "For children’s content, use the official YouTube app."
+            notice = item.youtubeMadeForKids
+                ? "For children’s content, use the official YouTube app."
+                : "Open this video in YouTube to play it."
             return
         }
         guard let videoID = item.youtubeVideoID else {

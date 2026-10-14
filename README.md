@@ -7,8 +7,8 @@ press Play.
 
 The minimum deployment target is iOS 17 because the app uses SwiftData. The app
 is built with SwiftUI, SwiftData and CloudKit; podcasts and resolved social
-videos use AVFoundation and MediaPlayer; YouTube uses the official YouTube Data
-API and IFrame Player API.
+videos use AVFoundation and MediaPlayer; YouTube uses public oEmbed metadata,
+the optional YouTube Data API, and the IFrame Player API.
 
 > [!IMPORTANT]
 > YouTube does not permit third-party API clients to extract audio, download
@@ -27,7 +27,7 @@ flowchart TD
     Queue --> Registry["ProviderRegistry"]
     Registry --> Podcast["Podcast adapter<br>direct audio · Apple Lookup · HTML/RSS"]
     Registry --> Social["X/Instagram adapter<br>video-grabber /resolve"]
-    Registry --> YouTube["YouTube adapter<br>official videos.list metadata"]
+    Registry --> YouTube["YouTube adapter<br>oEmbed · optional videos.list metadata"]
     Podcast --> Native["Native AVPlayer engine<br>progress + remote controls"]
     Social --> Grabber["video-grabber<br>yt-dlp resolution"]
     Grabber --> Native
@@ -53,9 +53,11 @@ Key implementation boundaries:
 - Videos can be shared from Now Playing or a queue item’s long-press menu. The
   outgoing share contains the canonical source page, never a short-lived media
   URL.
-- YouTube URL parsing yields a video ID. Public title, channel, artwork,
-  duration, embedding status, and made-for-kids status come only from the
-  official YouTube Data API `videos.list` endpoint.
+- YouTube URL parsing yields a video ID. Without configuration, the public
+  oEmbed endpoint supplies the title, channel, and artwork, and playback opens
+  in YouTube. When a Data API key is configured, `videos.list` also supplies
+  duration, embedding status, and made-for-kids status so eligible videos can
+  play in the app.
 - `QueueStore` persists queue order, item state, and playback progress. A
   CloudKit-backed SwiftData store synchronizes those values through the user’s
   private iCloud database; foreground refreshes reconcile remote changes.
@@ -97,12 +99,15 @@ MushRadio therefore behaves as follows:
 - Foreground auto-advance is attempted only while the player is visible.
   WebKit/YouTube may still block autoplay; the app then asks the user to tap
   Play.
-- A video whose official `status.embeddable` value is false is marked
-  unavailable and skipped.
-- As a conservative product safeguard, a video whose official
-  `status.madeForKids` value is true is handed off to the official YouTube app
-  or website instead of being embedded. This is a MushRadio product choice,
-  not a claim that every made-for-kids embed is categorically prohibited.
+- A video can be embedded only after a configured Data API request verifies its
+  `status.embeddable` and `status.madeForKids` values. Without that verification,
+  the item remains in the queue but opens in the official YouTube app or site.
+- A video whose official `status.embeddable` value is false remains in the
+  queue but opens in YouTube instead of constructing an embedded player.
+- With a Data API key configured, a video whose official `status.madeForKids`
+  value is true is conservatively handed off to the official YouTube app or
+  website instead of being embedded. This is a MushRadio product choice, not a
+  claim that every made-for-kids embed is categorically prohibited.
 - MushRadio does not scrape YouTube pages, suppress advertisements, alter the
   player, cache video, download media, or isolate an audio track.
 - It displays each video’s current API metadata without aggregating YouTube
@@ -130,8 +135,9 @@ Relevant official references:
   Groups and iCloud containers
 - An iPhone or iPad signed into iCloud for CloudKit and background-audio
   validation
-- A Google Cloud project with YouTube Data API v3 enabled
-- A restricted YouTube Data API key
+- Optionally, a Google Cloud project with YouTube Data API v3 enabled and a
+  restricted key for in-app YouTube playback, richer metadata, and preflight
+  status checks
 - A reachable deployment of
   [`Kevinmthau/video-grabber`](https://github.com/Kevinmthau/video-grabber)
 
@@ -140,7 +146,13 @@ sufficient evidence for CloudKit delivery, Share Sheet behavior across host
 apps, lock-screen controls, Bluetooth routing, interruptions, or App Store
 signing.
 
-## API key setup
+## Optional YouTube Data API key setup
+
+YouTube links can be added without an API key. In that mode the app uses
+YouTube's public oEmbed metadata and opens playback in the official YouTube app
+or site. A Data API key additionally provides duration, embeddability, and
+made-for-kids status so eligible videos can play in MushRadio's visible official
+player.
 
 The app reads `YOUTUBE_API_KEY` through `Config/Base.xcconfig`. Keep the actual
 key in the ignored local file:
@@ -181,14 +193,15 @@ monitoring, and rotation limit its usefulness; the `.xcconfig` file prevents
 accidental source-control disclosure but does not make the compiled key secret.
 
 The current app uses only public, non-authorized YouTube metadata. It does not
-sign the user into Google or request OAuth scopes. Podcast-only use does not
-need a YouTube key; adding or refreshing YouTube items does.
+sign the user into Google or request OAuth scopes. Adding and refreshing
+YouTube items falls back to public oEmbed metadata when this key is absent.
 
 The app also identifies the embedded player by loading its HTML with an HTTPS
 bundle-ID origin and passing the same origin to the IFrame Player API. YouTube
 player error `153` usually means that this client identity/referrer context is
-missing or rejected. Verify both the bundle identifier and API-key restriction
-before changing the player implementation.
+missing or rejected. Verify the bundle identifier and player origin before
+changing the player implementation. If `videos.list` requests fail separately,
+also verify the API-key restriction.
 
 ## video-grabber setup
 
@@ -405,8 +418,8 @@ and [background execution modes](https://developer.apple.com/documentation/xcode
 
 ## Running the app
 
-1. Configure signing, capabilities, CloudKit, and the YouTube API key as
-   described above.
+1. Configure signing, capabilities, and CloudKit as described above. Configure
+   the optional YouTube Data API key if in-app YouTube playback is desired.
 2. Open `ListenLater.xcodeproj` in Xcode.
 3. Select the `ListenLater` scheme and a simulator or signed device.
 4. Build and run.
@@ -492,9 +505,9 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
 - [ ] Install a non-demo build on two supported devices using the same iCloud
   account.
 - [ ] In Settings, confirm **iCloud Sync: On**, and under **Diagnostics**
-  confirm **YouTube API key: Set** and **Video resolver token: Set**.
-- [ ] Confirm an iOS-restricted key succeeds and rejected-key/quota errors are
-  understandable.
+  confirm the intended YouTube metadata mode and **Video resolver token: Set**.
+- [ ] If using the Data API, confirm an iOS-restricted key succeeds and
+  rejected-key/quota errors are understandable.
 - [ ] Confirm the production build contains the intended app, extension, App
   Group, iCloud, and background-mode entitlements.
 
@@ -511,8 +524,8 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
 - [ ] Share YouTube watch, short, live, mobile, and `youtu.be` URLs.
 - [ ] Confirm rapid extension completion and import when MushRadio activates.
 - [ ] Confirm the share sheet refuses a Spotify link with a reason.
-- [ ] Confirm unsupported, malformed, authenticated, deleted, and
-  non-embeddable items become unavailable with a readable reason in the row,
+- [ ] Confirm unsupported, malformed, authenticated, and deleted items become
+  unavailable with a readable reason in the row,
   tapping them offers Try Again, Open Original Link and Delete, and the queue
   continues.
 - [ ] Turn off networking during resolution, then retry from the item menu.
@@ -532,6 +545,8 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
 
 ### YouTube playback
 
+- [ ] Without a Data API key, confirm a shared video becomes ready with oEmbed
+  metadata, offers **Open in YouTube**, and never loads the embedded player.
 - [ ] Confirm the visible official player is at least 200 by 200 and all YouTube
   controls/branding remain usable and unobscured.
 - [ ] Confirm metadata, duration, `embeddable`, and made-for-kids behavior come
@@ -539,8 +554,8 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
 - [ ] Background and lock the device; verify YouTube pauses and no YouTube
   lock-screen remote controls remain.
 - [ ] Verify an autoplay-blocked transition presents a tap-to-play state.
-- [ ] Verify non-embeddable and removed videos are marked unavailable and
-  skipped.
+- [ ] Verify non-embeddable videos offer **Open in YouTube**, while removed
+  videos are marked unavailable and skipped.
 - [ ] Verify made-for-kids items offer **Open in YouTube**.
 - [ ] Finish a foreground YouTube item and verify foreground queue advance.
 - [ ] Finish a background podcast immediately before a YouTube or X video with
@@ -578,10 +593,10 @@ The app stores the user’s original URLs, ordered queue, playback progress, and
 resolved metadata locally and in the user’s private CloudKit database. For
 social videos it also stores the temporary direct media URL and its expiration
 time; the durable identifier remains the original post URL. It parses a YouTube
-video ID from the user-provided URL. Public YouTube API data stored by the app
-includes title, channel name, thumbnail URL, duration, embeddability, and
-made-for-kids status. It does not currently request Google login or authorized
-YouTube account data.
+video ID from the user-provided URL. Public YouTube metadata stored by the app
+includes title, channel name, and thumbnail URL. When the Data API is
+configured, it also stores duration, embeddability, and made-for-kids status.
+It does not currently request Google login or authorized YouTube account data.
 
 YouTube’s
 [Developer Policies](https://developers.google.com/youtube/terms/developer-policies)
@@ -633,8 +648,10 @@ privacy policy or legal terms.
 - Private, age-restricted, region-restricted, live-state-restricted, removed, or
   embedding-disabled YouTube videos may fail or require the official YouTube
   app.
-- Made-for-kids videos are conservatively handed to YouTube rather than embedded.
-- A valid API key and available quota are required to add new YouTube metadata.
+- When a Data API key is configured, made-for-kids videos are conservatively
+  handed to YouTube rather than embedded.
+- Without a Data API key, YouTube items have no duration or preflight status
+  flags and playback opens in the official YouTube app or site.
 - X and Instagram support depends on the self-hosted video-grabber deployment,
   its current `yt-dlp` compatibility, rate limits, and any cookies required for
   protected content. Only save media you are authorized to access.

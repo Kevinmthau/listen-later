@@ -109,6 +109,10 @@ final class QueueItem {
         isPlayed
     }
 
+    var requiresYouTubeApp: Bool {
+        source == .youtube && (youtubeMadeForKids || !youtubeEmbeddable)
+    }
+
     /// The name to show for where this came from, e.g. "X" or "Instagram"
     /// rather than the generic "Social Video".
     var sourceName: String {

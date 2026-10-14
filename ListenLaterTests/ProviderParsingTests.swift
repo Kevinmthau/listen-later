@@ -246,6 +246,116 @@ final class ProviderParsingTests: XCTestCase {
     }
 }
 
+final class YouTubeProviderAdapterTests: XCTestCase {
+    override func tearDown() {
+        HTTPClientURLProtocol.responses.removeAll()
+        super.tearDown()
+    }
+
+    func testResolvesSharedVideoWithOEmbedWhenAPIKeyIsMissing() async throws {
+        let sharedURL = URL(string: "https://youtu.be/4v837X1Py4M")!
+        let canonicalURL = URL(
+            string: "https://www.youtube.com/watch?v=4v837X1Py4M"
+        )!
+        let oEmbedEndpoint = URL(string: "https://metadata.example/oembed")!
+        var components = URLComponents(
+            url: oEmbedEndpoint,
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [
+            URLQueryItem(name: "url", value: canonicalURL.absoluteString),
+            URLQueryItem(name: "format", value: "json")
+        ]
+        let requestURL = try XCTUnwrap(components.url)
+        let responseData = try JSONSerialization.data(withJSONObject: [
+            "title": "Jack Clark and Robin Sloan - Fiction and the Future",
+            "author_name": "Jack Clark",
+            "thumbnail_url": "https://images.example/video.jpg",
+            "type": "video"
+        ])
+        HTTPClientURLProtocol.responses.set([
+            requestURL: .success(data: responseData)
+        ])
+        let adapter = YouTubeProviderAdapter(
+            configuration: YouTubeAPIConfiguration(
+                apiKey: "",
+                oEmbedEndpoint: oEmbedEndpoint
+            ),
+            client: makeClient()
+        )
+
+        let resolved = try await adapter.resolve(sharedURL)
+
+        XCTAssertEqual(resolved.originalURL, sharedURL)
+        XCTAssertEqual(resolved.canonicalURL, canonicalURL)
+        XCTAssertEqual(
+            resolved.title,
+            "Jack Clark and Robin Sloan - Fiction and the Future"
+        )
+        XCTAssertEqual(resolved.creatorName, "Jack Clark")
+        XCTAssertEqual(
+            resolved.artworkURL,
+            URL(string: "https://images.example/video.jpg")
+        )
+        XCTAssertNil(resolved.duration)
+        XCTAssertEqual(resolved.source, .youtube)
+        XCTAssertEqual(resolved.playback.youtubeVideoID, "4v837X1Py4M")
+        XCTAssertTrue(resolved.requiresOfficialYouTubeApp)
+        XCTAssertEqual(
+            HTTPClientURLProtocol.responses.requestedURLs,
+            [requestURL]
+        )
+    }
+
+    func testOEmbedNotFoundMakesVideoUnavailable() async throws {
+        let sharedURL = URL(string: "https://youtu.be/4v837X1Py4M")!
+        let oEmbedEndpoint = URL(string: "https://metadata.example/oembed")!
+        var components = URLComponents(
+            url: oEmbedEndpoint,
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [
+            URLQueryItem(
+                name: "url",
+                value: "https://www.youtube.com/watch?v=4v837X1Py4M"
+            ),
+            URLQueryItem(name: "format", value: "json")
+        ]
+        let requestURL = try XCTUnwrap(components.url)
+        HTTPClientURLProtocol.responses.set([
+            requestURL: HTTPClientURLProtocol.Response(
+                statusCode: 404,
+                headers: [:],
+                data: Data()
+            )
+        ])
+        let adapter = YouTubeProviderAdapter(
+            configuration: YouTubeAPIConfiguration(
+                apiKey: "",
+                oEmbedEndpoint: oEmbedEndpoint
+            ),
+            client: makeClient()
+        )
+
+        await XCTAssertThrowsProviderError(
+            .itemUnavailable(
+                "YouTube did not return public metadata for this video."
+            )
+        ) {
+            _ = try await adapter.resolve(sharedURL)
+        }
+    }
+
+    private func makeClient() -> ProviderHTTPClient {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [HTTPClientURLProtocol.self]
+        return ProviderHTTPClient(
+            session: URLSession(configuration: configuration),
+            validateEndpoint: { _ in }
+        )
+    }
+}
+
 final class VideoGrabberProviderAdapterTests: XCTestCase {
     override func tearDown() {
         HTTPClientURLProtocol.responses.removeAll()

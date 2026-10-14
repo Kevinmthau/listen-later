@@ -490,6 +490,29 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         )
     }
 
+    func testYouTubeWithoutVerifiedStatusOpensInOfficialApp() throws {
+        let harness = try makeHarness()
+        let item = appendYouTube(
+            to: harness.queue,
+            ordinal: 1,
+            requiresOfficialApp: true
+        )
+
+        harness.coordinator.start(item)
+
+        XCTAssertTrue(item.requiresYouTubeApp)
+        XCTAssertFalse(item.youtubeEmbeddable)
+        XCTAssertEqual(
+            harness.coordinator.transportState,
+            .requiresYouTubeApp
+        )
+        XCTAssertEqual(
+            harness.coordinator.notice,
+            "Open this video in YouTube to play it."
+        )
+        XCTAssertNil(harness.youtubePlayer.videoID)
+    }
+
     func testReplayingPlayedYouTubeClearsPlayedStateAndProgress() throws {
         let harness = try makeHarness()
         let item = appendYouTube(to: harness.queue, ordinal: 1)
@@ -1341,7 +1364,11 @@ private extension PlaybackCoordinatorPodcastEngineTests {
     }
 
     @discardableResult
-    func appendYouTube(to queue: QueueStore, ordinal: Int) -> QueueItem {
+    func appendYouTube(
+        to queue: QueueStore,
+        ordinal: Int,
+        requiresOfficialApp: Bool = false
+    ) -> QueueItem {
         queue.appendResolvedForTesting(
             ProviderResolvedItem(
                 originalURL: URL(
@@ -1357,7 +1384,8 @@ private extension PlaybackCoordinatorPodcastEngineTests {
                 publishedAt: nil,
                 source: .youtube,
                 playback: .youtubeVideoID("video\(String(format: "%05d", ordinal))"),
-                isMadeForKids: false
+                isMadeForKids: false,
+                requiresOfficialYouTubeApp: requiresOfficialApp
             )
         )
     }

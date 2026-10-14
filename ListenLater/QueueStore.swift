@@ -699,7 +699,7 @@ final class QueueStore {
         item.unavailableReason = nil
         item.metadataFetchedAt = Date()
         item.youtubeMadeForKids = resolved.isMadeForKids
-        item.youtubeEmbeddable = true
+        item.youtubeEmbeddable = !resolved.requiresOfficialYouTubeApp
 
         switch resolved.playback {
         case let .remoteAudio(url):
