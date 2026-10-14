@@ -13,7 +13,16 @@ struct YouTubeAPIConfiguration: Hashable, Sendable {
         endpoint: URL = defaultEndpoint,
         oEmbedEndpoint: URL = defaultOEmbedEndpoint
     ) {
-        self.apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAPIKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let uppercaseAPIKey = trimmedAPIKey.uppercased()
+        if uppercaseAPIKey.hasPrefix("REPLACE_WITH_")
+            || (trimmedAPIKey.hasPrefix("$(") && trimmedAPIKey.hasSuffix(")"))
+            || (trimmedAPIKey.hasPrefix("${") && trimmedAPIKey.hasSuffix("}"))
+        {
+            self.apiKey = ""
+        } else {
+            self.apiKey = trimmedAPIKey
+        }
         self.endpoint = endpoint
         self.oEmbedEndpoint = oEmbedEndpoint
     }
@@ -92,6 +101,30 @@ struct YouTubeProviderAdapter: MediaProvider {
             )
         }
 
+        do {
+            return try await resolveWithDataAPI(
+                originalURL: url,
+                canonicalURL: canonicalURL,
+                videoID: videoID
+            )
+        } catch let error as ProviderResolutionError {
+            guard shouldFallBackToOEmbed(after: error) else {
+                throw error
+            }
+            try Task.checkCancellation()
+            return try await resolveWithOEmbed(
+                originalURL: url,
+                canonicalURL: canonicalURL,
+                videoID: videoID
+            )
+        }
+    }
+
+    private func resolveWithDataAPI(
+        originalURL: URL,
+        canonicalURL: URL,
+        videoID: String
+    ) async throws -> ProviderResolvedItem {
         let requestURL = try metadataURL(videoID: videoID)
         var request = URLRequest(
             url: requestURL,
@@ -141,7 +174,7 @@ struct YouTubeProviderAdapter: MediaProvider {
             ?? "YouTube Video"
 
         return ProviderResolvedItem(
-            originalURL: url,
+            originalURL: originalURL,
             canonicalURL: canonicalURL,
             title: title,
             creatorName: ProviderTextSupport.cleanedTitle(video.snippet?.channelTitle),
@@ -155,6 +188,30 @@ struct YouTubeProviderAdapter: MediaProvider {
                 video.status?.embeddable != true
                 || video.status?.madeForKids == nil
         )
+    }
+
+    private func shouldFallBackToOEmbed(
+        after error: ProviderResolutionError
+    ) -> Bool {
+        switch error {
+        case .httpStatus,
+             .invalidHTTPResponse,
+             .responseTooLarge,
+             .malformedResponse,
+             .network:
+            true
+        case .invalidURL,
+             .unsupportedURL,
+             .invalidYouTubeVideoURL,
+             .invalidSocialVideoURL,
+             .videoGrabberUnauthorized,
+             .itemUnavailable,
+             .youtubeVideoNotEmbeddable,
+             .rssFeedNotFound,
+             .podcastEpisodeNotFound,
+             .podcastAudioEnclosureMissing:
+            false
+        }
     }
 
     private func resolveWithOEmbed(

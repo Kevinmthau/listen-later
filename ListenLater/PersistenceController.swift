@@ -12,7 +12,7 @@ enum AppConfiguration {
 
     static let youtubeAPIKey: String = {
         let value = Bundle.main.object(forInfoDictionaryKey: "YOUTUBE_API_KEY") as? String
-        return value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return YouTubeAPIConfiguration(apiKey: value ?? "").apiKey
     }()
 
     static let videoGrabberEndpoint: URL = {

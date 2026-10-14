@@ -307,6 +307,76 @@ final class YouTubeProviderAdapterTests: XCTestCase {
         )
     }
 
+    func testFallsBackToOEmbedWhenDataAPIRejectsConfiguredKey() async throws {
+        let sharedURL = URL(string: "https://youtu.be/4v837X1Py4M")!
+        let canonicalURL = URL(
+            string: "https://www.youtube.com/watch?v=4v837X1Py4M"
+        )!
+        let dataEndpoint = URL(string: "https://metadata.example/videos")!
+        let oEmbedEndpoint = URL(string: "https://metadata.example/oembed")!
+        let apiKey = "invalid-key"
+        let dataRequestURL = try dataAPIRequestURL(
+            endpoint: dataEndpoint,
+            videoID: "4v837X1Py4M",
+            apiKey: apiKey
+        )
+        let oEmbedRequestURL = try oEmbedRequestURL(
+            endpoint: oEmbedEndpoint,
+            canonicalURL: canonicalURL
+        )
+        let responseData = try JSONSerialization.data(withJSONObject: [
+            "title": "Jack Clark and Robin Sloan - Fiction and the Future",
+            "author_name": "Jack Clark",
+            "thumbnail_url": "https://images.example/video.jpg",
+            "type": "video"
+        ])
+        HTTPClientURLProtocol.responses.set([
+            dataRequestURL: HTTPClientURLProtocol.Response(
+                statusCode: 400,
+                headers: [:],
+                data: Data()
+            ),
+            oEmbedRequestURL: .success(data: responseData)
+        ])
+        let adapter = YouTubeProviderAdapter(
+            configuration: YouTubeAPIConfiguration(
+                apiKey: apiKey,
+                endpoint: dataEndpoint,
+                oEmbedEndpoint: oEmbedEndpoint
+            ),
+            client: makeClient()
+        )
+
+        let resolved = try await adapter.resolve(sharedURL)
+
+        XCTAssertEqual(
+            resolved.title,
+            "Jack Clark and Robin Sloan - Fiction and the Future"
+        )
+        XCTAssertTrue(resolved.requiresOfficialYouTubeApp)
+        XCTAssertEqual(
+            HTTPClientURLProtocol.responses.requestedURLs,
+            [dataRequestURL, oEmbedRequestURL]
+        )
+    }
+
+    func testTreatsPlaceholderAPIKeysAsMissing() {
+        XCTAssertEqual(
+            YouTubeAPIConfiguration(
+                apiKey: "REPLACE_WITH_YOUR_RESTRICTED_KEY"
+            ).apiKey,
+            ""
+        )
+        XCTAssertEqual(
+            YouTubeAPIConfiguration(apiKey: "$(YOUTUBE_API_KEY)").apiKey,
+            ""
+        )
+        XCTAssertEqual(
+            YouTubeAPIConfiguration(apiKey: "${YOUTUBE_API_KEY}").apiKey,
+            ""
+        )
+    }
+
     func testOEmbedNotFoundMakesVideoUnavailable() async throws {
         let sharedURL = URL(string: "https://youtu.be/4v837X1Py4M")!
         let oEmbedEndpoint = URL(string: "https://metadata.example/oembed")!
@@ -353,6 +423,40 @@ final class YouTubeProviderAdapterTests: XCTestCase {
             session: URLSession(configuration: configuration),
             validateEndpoint: { _ in }
         )
+    }
+
+    private func dataAPIRequestURL(
+        endpoint: URL,
+        videoID: String,
+        apiKey: String
+    ) throws -> URL {
+        var components = try XCTUnwrap(
+            URLComponents(url: endpoint, resolvingAgainstBaseURL: false)
+        )
+        components.queryItems = [
+            URLQueryItem(name: "part", value: "snippet,contentDetails,status"),
+            URLQueryItem(name: "id", value: videoID),
+            URLQueryItem(
+                name: "fields",
+                value: "items(id,snippet(title,channelTitle,publishedAt,thumbnails),contentDetails(duration),status(uploadStatus,privacyStatus,embeddable,madeForKids))"
+            ),
+            URLQueryItem(name: "key", value: apiKey)
+        ]
+        return try XCTUnwrap(components.url)
+    }
+
+    private func oEmbedRequestURL(
+        endpoint: URL,
+        canonicalURL: URL
+    ) throws -> URL {
+        var components = try XCTUnwrap(
+            URLComponents(url: endpoint, resolvingAgainstBaseURL: false)
+        )
+        components.queryItems = [
+            URLQueryItem(name: "url", value: canonicalURL.absoluteString),
+            URLQueryItem(name: "format", value: "json")
+        ]
+        return try XCTUnwrap(components.url)
     }
 }
 

@@ -194,7 +194,8 @@ accidental source-control disclosure but does not make the compiled key secret.
 
 The current app uses only public, non-authorized YouTube metadata. It does not
 sign the user into Google or request OAuth scopes. Adding and refreshing
-YouTube items falls back to public oEmbed metadata when this key is absent.
+YouTube items falls back to public oEmbed metadata when this key is absent,
+invalid, restricted incorrectly, over quota, or temporarily unavailable.
 
 The app also identifies the embedded player by loading its HTML with an HTTPS
 bundle-ID origin and passing the same origin to the IFrame Player API. YouTube
