@@ -29,6 +29,7 @@ final class MacPlaybackCoordinator {
     @ObservationIgnored private let engine: PodcastPlaybackEngine
     @ObservationIgnored private var activeLoadID: UUID?
     @ObservationIgnored private var pendingStartID = UUID()
+    @ObservationIgnored private var pendingAutoplayItemID: UUID?
 
     var currentItem: QueueItem? {
         item(id: currentItemID)
@@ -68,7 +69,7 @@ final class MacPlaybackCoordinator {
     func play() async {
         guard let item = currentItem else {
             if let first = playableItems.first {
-                await start(first, autoplay: true, automatic: false)
+                await start(first, autoplay: true, automatic: true)
             }
             return
         }
@@ -120,6 +121,7 @@ final class MacPlaybackCoordinator {
         invalidatePendingStart()
         engine.pause()
         activeLoadID = nil
+        pendingAutoplayItemID = nil
         currentItemID = nil
         state = .idle
         position = 0
@@ -185,8 +187,21 @@ final class MacPlaybackCoordinator {
             engine.setRate(Float(playbackRate))
         }
         if state == .loading, item.status == .ready {
-            state = .paused
-            notice = "Continue from your synced position."
+            if pendingAutoplayItemID == item.id {
+                pendingAutoplayItemID = nil
+                let itemID = item.id
+                let resumeID = UUID()
+                pendingStartID = resumeID
+                Task { [weak self] in
+                    guard let self,
+                          self.isCurrentStart(resumeID, itemID: itemID)
+                    else { return }
+                    await self.start(item, autoplay: true, automatic: true)
+                }
+            } else {
+                state = .paused
+                notice = "Continue from your synced position."
+            }
         }
     }
 
@@ -210,6 +225,7 @@ final class MacPlaybackCoordinator {
     ) async {
         let startID = UUID()
         pendingStartID = startID
+        pendingAutoplayItemID = nil
         saveProgress(force: true)
         engine.pause()
         activeLoadID = nil
@@ -224,6 +240,9 @@ final class MacPlaybackCoordinator {
             notice = item.status == .unavailable
                 ? (item.unavailableReason ?? "This item is unavailable.")
                 : "This item is still resolving."
+            if item.status == .resolving, autoplay {
+                pendingAutoplayItemID = item.id
+            }
             if automatic, item.status == .unavailable {
                 await startNext(after: item.id, automatic: true)
             }
@@ -347,6 +366,7 @@ final class MacPlaybackCoordinator {
         invalidatePendingStart()
         engine.pause()
         activeLoadID = nil
+        pendingAutoplayItemID = nil
         currentItemID = nil
         state = .idle
         position = 0
@@ -356,6 +376,7 @@ final class MacPlaybackCoordinator {
 
     private func invalidatePendingStart() {
         pendingStartID = UUID()
+        pendingAutoplayItemID = nil
     }
 
     private func isCurrentStart(_ startID: UUID, itemID: UUID) -> Bool {

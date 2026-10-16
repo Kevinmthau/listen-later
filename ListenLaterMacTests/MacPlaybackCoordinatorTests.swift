@@ -5,6 +5,77 @@ import XCTest
 
 @MainActor
 final class MacPlaybackCoordinatorTests: XCTestCase {
+    func testPlayWithNoSelectionSkipsUnavailableFirstItem() async throws {
+        let sharedContainer = try PersistenceController.makeContainer(inMemory: true).container
+        let localContainer = try LocalQueueStore.makeContainer(inMemory: true)
+        let shared = QueueStore(
+            context: sharedContainer.mainContext,
+            providers: ProviderRegistry(providers: [])
+        )
+        let local = LocalQueueStore(context: localContainer.mainContext)
+        let unavailable = podcast(title: "Unavailable", rank: 1)
+        unavailable.status = .unavailable
+        unavailable.unavailableReason = "Removed"
+        let ready = podcast(title: "Ready", rank: 2)
+        sharedContainer.mainContext.insert(unavailable)
+        sharedContainer.mainContext.insert(ready)
+        try sharedContainer.mainContext.save()
+        shared.refresh()
+
+        let engine = MacTestPlaybackEngine()
+        let coordinator = MacPlaybackCoordinator(
+            sharedQueue: shared,
+            localQueue: local,
+            localMediaLibrary: temporaryLibrary(),
+            engine: engine
+        )
+
+        await coordinator.play()
+
+        XCTAssertEqual(coordinator.currentItemID, ready.id)
+        XCTAssertEqual(coordinator.state, .playing)
+        XCTAssertEqual(engine.loadedURLs, [ready.playbackURL])
+        XCTAssertTrue(engine.isPlaying)
+    }
+
+    func testAutoplayContinuesWhenResolvingItemBecomesReady() async throws {
+        let sharedContainer = try PersistenceController.makeContainer(inMemory: true).container
+        let localContainer = try LocalQueueStore.makeContainer(inMemory: true)
+        let shared = QueueStore(
+            context: sharedContainer.mainContext,
+            providers: ProviderRegistry(providers: [])
+        )
+        let local = LocalQueueStore(context: localContainer.mainContext)
+        let resolving = podcast(title: "Resolving", rank: 1)
+        resolving.status = .resolving
+        resolving.playbackURLString = nil
+        sharedContainer.mainContext.insert(resolving)
+        try sharedContainer.mainContext.save()
+        shared.refresh()
+
+        let engine = MacTestPlaybackEngine()
+        let coordinator = MacPlaybackCoordinator(
+            sharedQueue: shared,
+            localQueue: local,
+            localMediaLibrary: temporaryLibrary(),
+            engine: engine
+        )
+        await coordinator.play()
+        XCTAssertEqual(coordinator.state, .loading)
+
+        resolving.status = .ready
+        resolving.playbackURLString = "https://cdn.example.com/resolved.mp3"
+        coordinator.reconcileQueueState()
+        for _ in 0..<20 where !engine.isPlaying {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(coordinator.currentItemID, resolving.id)
+        XCTAssertEqual(coordinator.state, .playing)
+        XCTAssertEqual(engine.loadedURLs, [resolving.playbackURL])
+        XCTAssertTrue(engine.isPlaying)
+    }
+
     func testAutomaticPlaybackSkipsMissingLocalBytesWithoutMutatingStatus() async throws {
         let sharedContainer = try PersistenceController.makeContainer(inMemory: true).container
         let localContainer = try LocalQueueStore.makeContainer(inMemory: true)
