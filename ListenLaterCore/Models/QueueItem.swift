@@ -10,6 +10,13 @@ final class QueueItem {
     var playbackURLExpiresAt: Date?
     var youtubeVideoID: String?
     var pendingShareReceiptIDString: String?
+    /// Stable identifier within app-owned local media storage. This is safe
+    /// metadata, never a path, bookmark, file URL, or media payload.
+    var localMediaIDString: String?
+    var localFilename: String?
+    var localPosterFilename: String?
+    var localPixelWidth: Double = 0
+    var localPixelHeight: Double = 0
 
     var title: String = "Untitled"
     var subtitle: String = ""
@@ -71,10 +78,15 @@ final class QueueItem {
         artworkURLString.flatMap(URL.init(string:))
     }
 
+    var localMediaID: UUID? {
+        get { localMediaIDString.flatMap(UUID.init(uuidString:)) }
+        set { localMediaIDString = newValue?.uuidString }
+    }
+
     /// The durable public page to send when sharing a video. Social-video
     /// playback URLs are intentionally excluded because they can expire.
     var videoShareURL: URL? {
-        guard source.isVideo else { return nil }
+        guard source.isVideo, source != .localVideo else { return nil }
         return canonicalURL ?? originalURL
     }
 
@@ -88,7 +100,7 @@ final class QueueItem {
     }
 
     var source: MediaSource {
-        get { MediaSource(rawValue: sourceRawValue) ?? .podcast }
+        get { MediaSource(rawValue: sourceRawValue) ?? .unknown }
         set { sourceRawValue = newValue.rawValue }
     }
 
@@ -134,6 +146,11 @@ final class QueueItem {
             playbackURLExpiresAt: playbackURLExpiresAt,
             youtubeVideoID: youtubeVideoID,
             pendingShareReceiptIDString: pendingShareReceiptIDString,
+            localMediaIDString: localMediaIDString,
+            localFilename: localFilename,
+            localPosterFilename: localPosterFilename,
+            localPixelWidth: localPixelWidth,
+            localPixelHeight: localPixelHeight,
             title: title,
             subtitle: subtitle,
             artworkURLString: artworkURLString,
@@ -165,6 +182,11 @@ struct QueueItemSnapshot: Sendable {
     let playbackURLExpiresAt: Date?
     let youtubeVideoID: String?
     let pendingShareReceiptIDString: String?
+    let localMediaIDString: String?
+    let localFilename: String?
+    let localPosterFilename: String?
+    let localPixelWidth: Double
+    let localPixelHeight: Double
     let title: String
     let subtitle: String
     let artworkURLString: String?
@@ -191,15 +213,24 @@ struct QueueItemSnapshot: Sendable {
             originalURL: originalURL,
             title: title,
             subtitle: subtitle,
-            source: MediaSource(rawValue: sourceRawValue) ?? .podcast,
+            source: MediaSource(rawValue: sourceRawValue) ?? .unknown,
             sortRank: sortRank,
             createdAt: createdAt
         )
+        // Preserve values written by newer app versions. The typed accessor
+        // intentionally maps them to `.unknown`, but Undo must not replace
+        // the durable value with the literal "unknown".
+        item.sourceRawValue = sourceRawValue
         item.canonicalURLString = canonicalURLString
         item.playbackURLString = playbackURLString
         item.playbackURLExpiresAt = playbackURLExpiresAt
         item.youtubeVideoID = youtubeVideoID
         item.pendingShareReceiptIDString = pendingShareReceiptIDString
+        item.localMediaIDString = localMediaIDString
+        item.localFilename = localFilename
+        item.localPosterFilename = localPosterFilename
+        item.localPixelWidth = localPixelWidth
+        item.localPixelHeight = localPixelHeight
         item.artworkURLString = artworkURLString
         item.duration = duration
         item.statusRawValue = statusRawValue

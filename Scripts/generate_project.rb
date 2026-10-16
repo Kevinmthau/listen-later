@@ -36,6 +36,19 @@ app_sources = source_files("ListenLater")
 core_sources = source_files("ListenLaterCore")
 share_sources = source_files("ListenLaterShare")
 test_sources = source_files("ListenLaterTests")
+mac_sources = source_files("ListenLaterMac")
+mac_test_sources = source_files("ListenLaterMacTests")
+
+mac_shared_sources = core_sources + [
+  "ListenLater/PersistenceController.swift",
+  "ListenLater/QueueStore.swift",
+  "ListenLater/Playback/PodcastPlaybackEngine.swift"
+]
+mac_test_support_sources = mac_shared_sources + [
+  "ListenLaterMac/LocalMediaLibrary.swift",
+  "ListenLaterMac/LocalQueueStore.swift",
+  "ListenLaterMac/MacPlaybackCoordinator.swift"
+]
 
 app_group_files = app_sources + [
   "ListenLater/Assets.xcassets",
@@ -48,13 +61,19 @@ share_group_files = share_sources + [
   "ListenLaterShare/ListenLaterShare.entitlements"
 ]
 test_group_files = test_sources
+mac_group_files = mac_sources + [
+  "ListenLaterMac/Assets.xcassets",
+  "ListenLaterMac/Info.plist",
+  "ListenLaterMac/ListenLaterMac.entitlements"
+]
+mac_test_group_files = mac_test_sources
 config_group_files = [
   "Config/Base.xcconfig",
   "Config/Secrets.xcconfig.example"
 ]
 all_file_references = (
   app_group_files + core_group_files + share_group_files +
-    test_group_files + config_group_files
+    test_group_files + mac_group_files + mac_test_group_files + config_group_files
 ).uniq
 
 project_id = identifier("project")
@@ -63,16 +82,22 @@ app_group_id = identifier("group:app")
 core_group_id = identifier("group:core")
 share_group_id = identifier("group:share")
 test_group_id = identifier("group:tests")
+mac_group_id = identifier("group:mac")
+mac_test_group_id = identifier("group:mac-tests")
 config_group_id = identifier("group:config")
 products_group_id = identifier("group:products")
 
 app_target_id = identifier("target:app")
 share_target_id = identifier("target:share")
 test_target_id = identifier("target:tests")
+mac_target_id = identifier("target:mac")
+mac_test_target_id = identifier("target:mac-tests")
 
 app_product_id = identifier("product:app")
 share_product_id = identifier("product:share")
 test_product_id = identifier("product:tests")
+mac_product_id = identifier("product:mac")
+mac_test_product_id = identifier("product:mac-tests")
 
 app_sources_phase = identifier("phase:app:sources")
 app_frameworks_phase = identifier("phase:app:frameworks")
@@ -84,11 +109,19 @@ share_resources_phase = identifier("phase:share:resources")
 test_sources_phase = identifier("phase:tests:sources")
 test_frameworks_phase = identifier("phase:tests:frameworks")
 test_resources_phase = identifier("phase:tests:resources")
+mac_sources_phase = identifier("phase:mac:sources")
+mac_frameworks_phase = identifier("phase:mac:frameworks")
+mac_resources_phase = identifier("phase:mac:resources")
+mac_test_sources_phase = identifier("phase:mac-tests:sources")
+mac_test_frameworks_phase = identifier("phase:mac-tests:frameworks")
+mac_test_resources_phase = identifier("phase:mac-tests:resources")
 
 app_config_list = identifier("config-list:app")
 share_config_list = identifier("config-list:share")
 test_config_list = identifier("config-list:tests")
 project_config_list = identifier("config-list:project")
+mac_config_list = identifier("config-list:mac")
+mac_test_config_list = identifier("config-list:mac-tests")
 
 app_debug_config = identifier("config:app:debug")
 app_release_config = identifier("config:app:release")
@@ -98,6 +131,10 @@ test_debug_config = identifier("config:tests:debug")
 test_release_config = identifier("config:tests:release")
 project_debug_config = identifier("config:project:debug")
 project_release_config = identifier("config:project:release")
+mac_debug_config = identifier("config:mac:debug")
+mac_release_config = identifier("config:mac:release")
+mac_test_debug_config = identifier("config:mac-tests:debug")
+mac_test_release_config = identifier("config:mac-tests:release")
 
 share_proxy_id = identifier("proxy:share")
 app_proxy_id = identifier("proxy:app")
@@ -124,16 +161,24 @@ end
 test_source_builds = test_sources.map do |path|
   [identifier("build:tests:#{path}"), path]
 end
+mac_source_builds = (mac_sources + mac_shared_sources).uniq.map do |path|
+  [identifier("build:mac:#{path}"), path]
+end
+mac_test_source_builds = (mac_test_sources + mac_test_support_sources).uniq.map do |path|
+  [identifier("build:mac-tests:#{path}"), path]
+end
 asset_build_id = identifier("build:app:ListenLater/Assets.xcassets")
+mac_asset_build_id = identifier("build:mac:ListenLaterMac/Assets.xcassets")
 embed_build_id = identifier("build:embed:share")
 
 objects = []
 
 objects << "/* Begin PBXBuildFile section */"
-(app_source_builds + share_source_builds + test_source_builds).each do |build_id, path|
+(app_source_builds + share_source_builds + test_source_builds + mac_source_builds + mac_test_source_builds).each do |build_id, path|
   objects << "\t\t#{build_id} /* #{File.basename(path)} in Sources */ = {isa = PBXBuildFile; fileRef = #{identifier("file:#{path}")} /* #{File.basename(path)} */; };"
 end
 objects << "\t\t#{asset_build_id} /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = #{identifier("file:ListenLater/Assets.xcassets")} /* Assets.xcassets */; };"
+objects << "\t\t#{mac_asset_build_id} /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = #{identifier("file:ListenLaterMac/Assets.xcassets")} /* Assets.xcassets */; };"
 objects << "\t\t#{embed_build_id} /* ListenLaterShare.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = #{share_product_id} /* ListenLaterShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };"
 objects << "/* End PBXBuildFile section */"
 objects << ""
@@ -165,6 +210,8 @@ all_file_references.each do |path|
     when %r{\AListenLaterCore/} then path.delete_prefix("ListenLaterCore/")
     when %r{\AListenLaterShare/} then path.delete_prefix("ListenLaterShare/")
     when %r{\AListenLaterTests/} then path.delete_prefix("ListenLaterTests/")
+    when %r{\AListenLaterMac/} then path.delete_prefix("ListenLaterMac/")
+    when %r{\AListenLaterMacTests/} then path.delete_prefix("ListenLaterMacTests/")
     when %r{\AConfig/} then path.delete_prefix("Config/")
     else path
     end
@@ -173,6 +220,8 @@ end
 objects << "\t\t#{app_product_id} /* ListenLater.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ListenLater.app; sourceTree = BUILT_PRODUCTS_DIR; };"
 objects << "\t\t#{share_product_id} /* ListenLaterShare.appex */ = {isa = PBXFileReference; explicitFileType = \"wrapper.app-extension\"; includeInIndex = 0; path = ListenLaterShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };"
 objects << "\t\t#{test_product_id} /* ListenLaterTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ListenLaterTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };"
+objects << "\t\t#{mac_product_id} /* ListenLaterMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ListenLaterMac.app; sourceTree = BUILT_PRODUCTS_DIR; };"
+objects << "\t\t#{mac_test_product_id} /* ListenLaterMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ListenLaterMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };"
 objects << "/* End PBXFileReference section */"
 objects << ""
 
@@ -180,7 +229,9 @@ objects << "/* Begin PBXFrameworksBuildPhase section */"
 [
   [app_frameworks_phase, "Frameworks"],
   [share_frameworks_phase, "Frameworks"],
-  [test_frameworks_phase, "Frameworks"]
+  [test_frameworks_phase, "Frameworks"],
+  [mac_frameworks_phase, "Frameworks"],
+  [mac_test_frameworks_phase, "Frameworks"]
 ].each do |phase_id, name|
   objects << "\t\t#{phase_id} /* #{name} */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };"
 end
@@ -212,6 +263,8 @@ objects.concat([
   "\t\t\t\t#{core_group_id} /* ListenLaterCore */,",
   "\t\t\t\t#{share_group_id} /* ListenLaterShare */,",
   "\t\t\t\t#{test_group_id} /* ListenLaterTests */,",
+  "\t\t\t\t#{mac_group_id} /* ListenLaterMac */,",
+  "\t\t\t\t#{mac_test_group_id} /* ListenLaterMacTests */,",
   "\t\t\t\t#{config_group_id} /* Config */,",
   "\t\t\t\t#{products_group_id} /* Products */,",
   "\t\t\t);",
@@ -222,6 +275,8 @@ objects.concat(group_object(app_group_id, "ListenLater", "ListenLater", app_grou
 objects.concat(group_object(core_group_id, "ListenLaterCore", "ListenLaterCore", core_group_files))
 objects.concat(group_object(share_group_id, "ListenLaterShare", "ListenLaterShare", share_group_files))
 objects.concat(group_object(test_group_id, "ListenLaterTests", "ListenLaterTests", test_group_files))
+objects.concat(group_object(mac_group_id, "ListenLaterMac", "ListenLaterMac", mac_group_files))
+objects.concat(group_object(mac_test_group_id, "ListenLaterMacTests", "ListenLaterMacTests", mac_test_group_files))
 objects.concat(group_object(config_group_id, "Config", "Config", config_group_files))
 objects.concat([
   "\t\t#{products_group_id} /* Products */ = {",
@@ -230,6 +285,8 @@ objects.concat([
   "\t\t\t\t#{app_product_id} /* ListenLater.app */,",
   "\t\t\t\t#{share_product_id} /* ListenLaterShare.appex */,",
   "\t\t\t\t#{test_product_id} /* ListenLaterTests.xctest */,",
+  "\t\t\t\t#{mac_product_id} /* ListenLaterMac.app */,",
+  "\t\t\t\t#{mac_test_product_id} /* ListenLaterMacTests.xctest */,",
   "\t\t\t);",
   "\t\t\tname = Products;",
   "\t\t\tsourceTree = \"<group>\";",
@@ -272,6 +329,28 @@ objects.concat([
   "\t\t\tproductName = ListenLaterTests;",
   "\t\t\tproductReference = #{test_product_id} /* ListenLaterTests.xctest */;",
   "\t\t\tproductType = \"com.apple.product-type.bundle.unit-test\";",
+  "\t\t};",
+  "\t\t#{mac_target_id} /* ListenLaterMac */ = {",
+  "\t\t\tisa = PBXNativeTarget;",
+  "\t\t\tbuildConfigurationList = #{mac_config_list} /* Build configuration list for PBXNativeTarget \"ListenLaterMac\" */;",
+  "\t\t\tbuildPhases = (#{mac_sources_phase} /* Sources */, #{mac_frameworks_phase} /* Frameworks */, #{mac_resources_phase} /* Resources */, );",
+  "\t\t\tbuildRules = ();",
+  "\t\t\tdependencies = ();",
+  "\t\t\tname = ListenLaterMac;",
+  "\t\t\tproductName = ListenLaterMac;",
+  "\t\t\tproductReference = #{mac_product_id} /* ListenLaterMac.app */;",
+  "\t\t\tproductType = \"com.apple.product-type.application\";",
+  "\t\t};",
+  "\t\t#{mac_test_target_id} /* ListenLaterMacTests */ = {",
+  "\t\t\tisa = PBXNativeTarget;",
+  "\t\t\tbuildConfigurationList = #{mac_test_config_list} /* Build configuration list for PBXNativeTarget \"ListenLaterMacTests\" */;",
+  "\t\t\tbuildPhases = (#{mac_test_sources_phase} /* Sources */, #{mac_test_frameworks_phase} /* Frameworks */, #{mac_test_resources_phase} /* Resources */, );",
+  "\t\t\tbuildRules = ();",
+  "\t\t\tdependencies = ();",
+  "\t\t\tname = ListenLaterMacTests;",
+  "\t\t\tproductName = ListenLaterMacTests;",
+  "\t\t\tproductReference = #{mac_test_product_id} /* ListenLaterMacTests.xctest */;",
+  "\t\t\tproductType = \"com.apple.product-type.bundle.unit-test\";",
   "\t\t};"
 ])
 objects << "/* End PBXNativeTarget section */"
@@ -289,6 +368,8 @@ objects.concat([
   "\t\t\t\t\t#{app_target_id} = {CreatedOnToolsVersion = 26.6; };",
   "\t\t\t\t\t#{share_target_id} = {CreatedOnToolsVersion = 26.6; };",
   "\t\t\t\t\t#{test_target_id} = {CreatedOnToolsVersion = 26.6; TestTargetID = #{app_target_id}; };",
+  "\t\t\t\t\t#{mac_target_id} = {CreatedOnToolsVersion = 26.6; };",
+  "\t\t\t\t\t#{mac_test_target_id} = {CreatedOnToolsVersion = 26.6; TestTargetID = #{mac_target_id}; };",
   "\t\t\t\t};",
   "\t\t\t};",
   "\t\t\tbuildConfigurationList = #{project_config_list} /* Build configuration list for PBXProject \"ListenLater\" */;",
@@ -300,7 +381,7 @@ objects.concat([
   "\t\t\tproductRefGroup = #{products_group_id} /* Products */;",
   "\t\t\tprojectDirPath = \"\";",
   "\t\t\tprojectRoot = \"\";",
-  "\t\t\ttargets = (#{app_target_id} /* ListenLater */, #{share_target_id} /* ListenLaterShare */, #{test_target_id} /* ListenLaterTests */, );",
+  "\t\t\ttargets = (#{app_target_id} /* ListenLater */, #{share_target_id} /* ListenLaterShare */, #{test_target_id} /* ListenLaterTests */, #{mac_target_id} /* ListenLaterMac */, #{mac_test_target_id} /* ListenLaterMacTests */, );",
   "\t\t};"
 ])
 objects << "/* End PBXProject section */"
@@ -310,6 +391,8 @@ objects << "/* Begin PBXResourcesBuildPhase section */"
 objects << "\t\t#{app_resources_phase} /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (#{asset_build_id} /* Assets.xcassets in Resources */, ); runOnlyForDeploymentPostprocessing = 0; };"
 objects << "\t\t#{share_resources_phase} /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };"
 objects << "\t\t#{test_resources_phase} /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };"
+objects << "\t\t#{mac_resources_phase} /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (#{mac_asset_build_id} /* Assets.xcassets in Resources */, ); runOnlyForDeploymentPostprocessing = 0; };"
+objects << "\t\t#{mac_test_resources_phase} /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };"
 objects << "/* End PBXResourcesBuildPhase section */"
 objects << ""
 
@@ -333,6 +416,8 @@ objects << "/* Begin PBXSourcesBuildPhase section */"
 objects.concat(sources_phase(app_sources_phase, app_source_builds))
 objects.concat(sources_phase(share_sources_phase, share_source_builds))
 objects.concat(sources_phase(test_sources_phase, test_source_builds))
+objects.concat(sources_phase(mac_sources_phase, mac_source_builds))
+objects.concat(sources_phase(mac_test_sources_phase, mac_test_source_builds))
 objects << "/* End PBXSourcesBuildPhase section */"
 objects << ""
 
@@ -398,9 +483,7 @@ common_project_settings = {
   "GCC_WARN_UNINITIALIZED_AUTOS" => "YES_AGGRESSIVE",
   "GCC_WARN_UNUSED_FUNCTION" => "YES",
   "GCC_WARN_UNUSED_VARIABLE" => "YES",
-  "IPHONEOS_DEPLOYMENT_TARGET" => "17.0",
   "LOCALIZATION_PREFERS_STRING_CATALOGS" => "YES",
-  "SDKROOT" => "iphoneos",
   "SWIFT_VERSION" => "5.0"
 }
 
@@ -413,10 +496,12 @@ app_settings = {
   "ENABLE_PREVIEWS" => "YES",
   "GENERATE_INFOPLIST_FILE" => "NO",
   "INFOPLIST_FILE" => "ListenLater/Info.plist",
+  "IPHONEOS_DEPLOYMENT_TARGET" => "17.0",
   "LD_RUNPATH_SEARCH_PATHS" => ["$(inherited)", "@executable_path/Frameworks"],
   "MARKETING_VERSION" => "1.0",
   "PRODUCT_BUNDLE_IDENTIFIER" => "com.kevinthau.ListenLater",
   "PRODUCT_NAME" => "$(TARGET_NAME)",
+  "SDKROOT" => "iphoneos",
   "SUPPORTED_PLATFORMS" => "iphoneos iphonesimulator",
   "SWIFT_EMIT_LOC_STRINGS" => "YES",
   "SWIFT_STRICT_CONCURRENCY" => "targeted",
@@ -430,10 +515,12 @@ share_settings = {
   "CURRENT_PROJECT_VERSION" => "1",
   "GENERATE_INFOPLIST_FILE" => "NO",
   "INFOPLIST_FILE" => "ListenLaterShare/Info.plist",
+  "IPHONEOS_DEPLOYMENT_TARGET" => "17.0",
   "LD_RUNPATH_SEARCH_PATHS" => ["$(inherited)", "@executable_path/../../Frameworks"],
   "MARKETING_VERSION" => "1.0",
   "PRODUCT_BUNDLE_IDENTIFIER" => "com.kevinthau.ListenLater.AddToQueue",
   "PRODUCT_NAME" => "$(TARGET_NAME)",
+  "SDKROOT" => "iphoneos",
   "SKIP_INSTALL" => "YES",
   "SUPPORTED_PLATFORMS" => "iphoneos iphonesimulator",
   "SWIFT_EMIT_LOC_STRINGS" => "YES",
@@ -450,10 +537,47 @@ test_settings = {
   "MARKETING_VERSION" => "1.0",
   "PRODUCT_BUNDLE_IDENTIFIER" => "com.kevinthau.ListenLaterTests",
   "PRODUCT_NAME" => "$(TARGET_NAME)",
+  "SDKROOT" => "iphoneos",
   "SUPPORTED_PLATFORMS" => "iphoneos iphonesimulator",
   "SWIFT_STRICT_CONCURRENCY" => "targeted",
   "TARGETED_DEVICE_FAMILY" => "1,2",
   "TEST_HOST" => "$(BUILT_PRODUCTS_DIR)/ListenLater.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ListenLater"
+}
+
+mac_settings = {
+  "ASSETCATALOG_COMPILER_APPICON_NAME" => "AppIcon",
+  "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME" => "AccentColor",
+  "CODE_SIGN_ENTITLEMENTS" => "ListenLaterMac/ListenLaterMac.entitlements",
+  "CODE_SIGN_STYLE" => "Automatic",
+  "COMBINE_HIDPI_IMAGES" => "YES",
+  "CURRENT_PROJECT_VERSION" => "1",
+  "ENABLE_APP_SANDBOX" => "YES",
+  "ENABLE_HARDENED_RUNTIME" => "YES",
+  "ENABLE_PREVIEWS" => "YES",
+  "GENERATE_INFOPLIST_FILE" => "NO",
+  "INFOPLIST_FILE" => "ListenLaterMac/Info.plist",
+  "LD_RUNPATH_SEARCH_PATHS" => ["$(inherited)", "@executable_path/../Frameworks"],
+  "MACOSX_DEPLOYMENT_TARGET" => "14.0",
+  "MARKETING_VERSION" => "1.0",
+  "PRODUCT_BUNDLE_IDENTIFIER" => "com.kevinthau.ListenLaterMac",
+  "PRODUCT_NAME" => "$(TARGET_NAME)",
+  "SDKROOT" => "macosx",
+  "SUPPORTED_PLATFORMS" => "macosx",
+  "SWIFT_EMIT_LOC_STRINGS" => "YES",
+  "SWIFT_STRICT_CONCURRENCY" => "targeted"
+}
+
+mac_test_settings = {
+  "CODE_SIGN_STYLE" => "Automatic",
+  "CURRENT_PROJECT_VERSION" => "1",
+  "GENERATE_INFOPLIST_FILE" => "YES",
+  "MACOSX_DEPLOYMENT_TARGET" => "14.0",
+  "MARKETING_VERSION" => "1.0",
+  "PRODUCT_BUNDLE_IDENTIFIER" => "com.kevinthau.ListenLaterMacTests",
+  "PRODUCT_NAME" => "$(TARGET_NAME)",
+  "SDKROOT" => "macosx",
+  "SUPPORTED_PLATFORMS" => "macosx",
+  "SWIFT_STRICT_CONCURRENCY" => "targeted"
 }
 
 configurations = [
@@ -479,7 +603,11 @@ configurations = [
   [share_debug_config, "Debug", share_settings],
   [share_release_config, "Release", share_settings],
   [test_debug_config, "Debug", test_settings],
-  [test_release_config, "Release", test_settings]
+  [test_release_config, "Release", test_settings],
+  [mac_debug_config, "Debug", mac_settings],
+  [mac_release_config, "Release", mac_settings],
+  [mac_test_debug_config, "Debug", mac_test_settings],
+  [mac_test_release_config, "Release", mac_test_settings]
 ]
 
 objects << "/* Begin XCBuildConfiguration section */"
@@ -501,7 +629,9 @@ objects << "/* Begin XCConfigurationList section */"
   [project_config_list, "PBXProject \"ListenLater\"", project_debug_config, project_release_config],
   [app_config_list, "PBXNativeTarget \"ListenLater\"", app_debug_config, app_release_config],
   [share_config_list, "PBXNativeTarget \"ListenLaterShare\"", share_debug_config, share_release_config],
-  [test_config_list, "PBXNativeTarget \"ListenLaterTests\"", test_debug_config, test_release_config]
+  [test_config_list, "PBXNativeTarget \"ListenLaterTests\"", test_debug_config, test_release_config],
+  [mac_config_list, "PBXNativeTarget \"ListenLaterMac\"", mac_debug_config, mac_release_config],
+  [mac_test_config_list, "PBXNativeTarget \"ListenLaterMacTests\"", mac_test_debug_config, mac_test_release_config]
 ].each do |list_id, comment, debug_id, release_id|
   objects << "\t\t#{list_id} /* Build configuration list for #{comment} */ = {isa = XCConfigurationList; buildConfigurations = (#{debug_id} /* Debug */, #{release_id} /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };"
 end
@@ -557,12 +687,51 @@ scheme = <<~XML
   </Scheme>
 XML
 
+mac_scheme = <<~XML
+  <?xml version="1.0" encoding="UTF-8"?>
+  <Scheme LastUpgradeVersion = "2660" version = "1.7">
+     <BuildAction parallelizeBuildables = "YES" buildImplicitDependencies = "YES">
+        <BuildActionEntries>
+           <BuildActionEntry buildForTesting = "YES" buildForRunning = "YES" buildForProfiling = "YES" buildForArchiving = "YES" buildForAnalyzing = "YES">
+              <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "#{mac_target_id}" BuildableName = "ListenLaterMac.app" BlueprintName = "ListenLaterMac" ReferencedContainer = "container:ListenLater.xcodeproj"/>
+           </BuildActionEntry>
+           <BuildActionEntry buildForTesting = "YES" buildForRunning = "NO" buildForProfiling = "NO" buildForArchiving = "NO" buildForAnalyzing = "NO">
+              <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "#{mac_test_target_id}" BuildableName = "ListenLaterMacTests.xctest" BlueprintName = "ListenLaterMacTests" ReferencedContainer = "container:ListenLater.xcodeproj"/>
+           </BuildActionEntry>
+        </BuildActionEntries>
+     </BuildAction>
+     <TestAction buildConfiguration = "Debug" selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv = "YES">
+        <Testables>
+           <TestableReference skipped = "NO">
+              <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "#{mac_test_target_id}" BuildableName = "ListenLaterMacTests.xctest" BlueprintName = "ListenLaterMacTests" ReferencedContainer = "container:ListenLater.xcodeproj"/>
+           </TestableReference>
+        </Testables>
+     </TestAction>
+     <LaunchAction buildConfiguration = "Debug" selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB" launchStyle = "0" useCustomWorkingDirectory = "NO" ignoresPersistentStateOnLaunch = "NO" debugDocumentVersioning = "YES" debugServiceExtension = "internal">
+        <BuildableProductRunnable runnableDebuggingMode = "0">
+           <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "#{mac_target_id}" BuildableName = "ListenLaterMac.app" BlueprintName = "ListenLaterMac" ReferencedContainer = "container:ListenLater.xcodeproj"/>
+        </BuildableProductRunnable>
+     </LaunchAction>
+     <ProfileAction buildConfiguration = "Release" shouldUseLaunchSchemeArgsEnv = "YES" savedToolIdentifier = "" useCustomWorkingDirectory = "NO" debugDocumentVersioning = "YES">
+        <BuildableProductRunnable runnableDebuggingMode = "0">
+           <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "#{mac_target_id}" BuildableName = "ListenLaterMac.app" BlueprintName = "ListenLaterMac" ReferencedContainer = "container:ListenLater.xcodeproj"/>
+        </BuildableProductRunnable>
+     </ProfileAction>
+     <AnalyzeAction buildConfiguration = "Debug"/>
+     <ArchiveAction buildConfiguration = "Release" revealArchiveInOrganizer = "YES"/>
+  </Scheme>
+XML
+
 FileUtils.mkdir_p(File.join(PROJECT_DIR, "xcshareddata", "xcschemes"))
 File.write(File.join(PROJECT_DIR, "project.pbxproj"), project)
 File.write(
   File.join(PROJECT_DIR, "xcshareddata", "xcschemes", "ListenLater.xcscheme"),
   scheme
 )
+File.write(
+  File.join(PROJECT_DIR, "xcshareddata", "xcschemes", "ListenLaterMac.xcscheme"),
+  mac_scheme
+)
 
 puts "Generated #{File.join(PROJECT_DIR, 'project.pbxproj')}"
-puts "App sources: #{app_source_builds.count}; share sources: #{share_source_builds.count}; tests: #{test_source_builds.count}"
+puts "App sources: #{app_source_builds.count}; share sources: #{share_source_builds.count}; tests: #{test_source_builds.count}; Mac sources: #{mac_source_builds.count}; Mac tests: #{mac_test_source_builds.count}"

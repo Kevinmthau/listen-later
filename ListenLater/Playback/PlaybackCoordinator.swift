@@ -97,7 +97,7 @@ final class PlaybackCoordinator {
 
     @ObservationIgnored private let queue: QueueStore
     @ObservationIgnored private let podcastEngine: PodcastPlaybackEngine
-    @ObservationIgnored private let audioSession: AVAudioSession
+    @ObservationIgnored private let audioSession: AudioSessionAdapting
     @ObservationIgnored private let sleepTimerDelay: @Sendable (TimeInterval) async throws -> Void
     @ObservationIgnored private let clipsPlayContinuously: () -> Bool
     @ObservationIgnored private var sleepTimerTask: Task<Void, Never>?
@@ -168,7 +168,7 @@ final class PlaybackCoordinator {
         queue: QueueStore,
         podcastEngine: PodcastPlaybackEngine? = nil,
         youtubePlayer: YouTubePlayerModel? = nil,
-        audioSession: AVAudioSession? = nil,
+        audioSession: AudioSessionAdapting? = nil,
         sleepTimerDelay: @escaping @Sendable (TimeInterval) async throws -> Void = {
             try await Task.sleep(for: .seconds($0))
         },
@@ -181,7 +181,7 @@ final class PlaybackCoordinator {
         self.queue = queue
         self.podcastEngine = podcastEngine
         self.youtubePlayer = youtubePlayer
-        self.audioSession = audioSession ?? .sharedInstance()
+        self.audioSession = audioSession ?? IOSAudioSessionAdapter()
         self.sleepTimerDelay = sleepTimerDelay
         self.clipsPlayContinuously = clipsPlayContinuously
 
@@ -287,6 +287,12 @@ final class PlaybackCoordinator {
             }
             youtubePlayer.play()
             transportState = youtubePlayer.isReady ? .loading : .needsUserAction
+        case .localVideo:
+            transportState = .needsUserAction
+            notice = "This local video is available only on the Mac that imported it."
+        case .unknown:
+            transportState = .needsUserAction
+            notice = "This item was created by a newer version of MushRadio."
         }
     }
 
@@ -365,6 +371,12 @@ final class PlaybackCoordinator {
             startNativePlayback(item, autoplay: autoplay)
         case .youtube:
             startYouTube(item, autoplay: autoplay)
+        case .localVideo:
+            transportState = .needsUserAction
+            notice = "This local video is available only on the Mac that imported it."
+        case .unknown:
+            transportState = .needsUserAction
+            notice = "This item was created by a newer version of MushRadio."
         }
     }
 
@@ -385,6 +397,8 @@ final class PlaybackCoordinator {
             podcastEngine.pause()
         case .youtube:
             youtubePlayer.pause()
+        case .localVideo, .unknown:
+            podcastEngine.pause()
         }
         transportState = .paused
         saveCurrentProgress(force: true)
@@ -409,6 +423,8 @@ final class PlaybackCoordinator {
             podcastEngine.seek(to: clamped)
         case .youtube:
             youtubePlayer.seek(to: clamped)
+        case .localVideo, .unknown:
+            break
         }
         queue.saveProgress(
             for: item,
@@ -430,6 +446,8 @@ final class PlaybackCoordinator {
             podcastEngine.setRate(Float(playbackRate))
         case .youtube:
             youtubePlayer.setPlaybackRate(playbackRate)
+        case .localVideo, .unknown:
+            break
         }
         queue.saveProgress(
             for: item,
@@ -561,10 +579,7 @@ final class PlaybackCoordinator {
             podcastEngine.pause()
             youtubePlayer.pause()
             setRemoteCommandsEnabled(false)
-            try? audioSession.setActive(
-                false,
-                options: .notifyOthersOnDeactivation
-            )
+            try? audioSession.deactivate()
             currentItemID = nil
             preparedItemID = nil
             pendingResolutionAutoplayItemID = nil
@@ -649,6 +664,8 @@ final class PlaybackCoordinator {
                     youtubePlayer.seek(to: position)
                     youtubePlayer.setPlaybackRate(playbackRate)
                 }
+            case .localVideo, .unknown:
+                break
             }
         } else if transportState == .loading, item.status == .ready {
             transportState = .paused
@@ -699,7 +716,7 @@ final class PlaybackCoordinator {
         podcastEngine.pause()
         activePodcastLoadID = nil
         activeYouTubeLoadID = nil
-        try? audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+        try? audioSession.deactivate()
         setRemoteCommandsEnabled(false)
         clearNowPlaying()
 
@@ -1012,10 +1029,7 @@ final class PlaybackCoordinator {
         podcastEngine.pause()
         youtubePlayer.pause()
         setRemoteCommandsEnabled(false)
-        try? audioSession.setActive(
-            false,
-            options: .notifyOthersOnDeactivation
-        )
+        try? audioSession.deactivate()
         currentItemID = nil
         preparedItemID = nil
         pendingResolutionAutoplayItemID = nil
@@ -1041,10 +1055,7 @@ final class PlaybackCoordinator {
         isBuffering = false
         setRemoteCommandsEnabled(false)
         if deactivateAudioSession {
-            try? audioSession.setActive(
-                false,
-                options: .notifyOthersOnDeactivation
-            )
+            try? audioSession.deactivate()
         }
         clearNowPlaying()
     }
@@ -1062,11 +1073,7 @@ final class PlaybackCoordinator {
 
     private func configureAudioSession() {
         do {
-            try audioSession.setCategory(
-                .playback,
-                mode: .spokenAudio,
-                options: [.allowAirPlay, .allowBluetoothA2DP]
-            )
+            try audioSession.configureForPlayback()
         } catch {
             notice = "Background audio setup failed: \(error.localizedDescription)"
         }
@@ -1074,69 +1081,36 @@ final class PlaybackCoordinator {
 
     private func activateAudioSession() {
         do {
-            try audioSession.setActive(true)
+            try audioSession.activate()
         } catch {
             notice = "Audio output is unavailable: \(error.localizedDescription)"
         }
     }
 
     private func observeAudioSession() {
-        let interruption = NotificationCenter.default.addObserver(
-            forName: AVAudioSession.interruptionNotification,
-            object: audioSession,
-            queue: .main
-        ) { [weak self] notification in
-            let rawValue = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
-            let rawOptions =
-                notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt
-                ?? 0
-            Task { @MainActor in
-                guard
-                    let rawValue,
-                    let type = AVAudioSession.InterruptionType(rawValue: rawValue)
-                else { return }
-                switch type {
+        notificationObservers.append(contentsOf: audioSession.observe(
+            interruption: { [weak self] interruption in
+                guard let self, self.currentItem?.source != .youtube else { return }
+                switch interruption {
                 case .began:
-                    guard let self, self.currentItem?.source != .youtube else {
-                        return
-                    }
                     let pausedByThisInterruption = self.externallyPausedAt.map {
                         Date().timeIntervalSince($0) < 2
                     } ?? false
                     self.wasPlayingBeforeInterruption =
                         self.transportState.isPlaying || pausedByThisInterruption
                     self.pause()
-                case .ended:
-                    guard let self else { return }
-                    let options = AVAudioSession.InterruptionOptions(rawValue: rawOptions)
-                    let shouldResume = options.contains(.shouldResume)
+                case let .ended(shouldResume):
                     let resume = self.wasPlayingBeforeInterruption && shouldResume
                     self.wasPlayingBeforeInterruption = false
                     if resume {
                         self.play()
                     }
-                @unknown default:
-                    break
                 }
-            }
-        }
-        notificationObservers.append(interruption)
-
-        let routeChange = NotificationCenter.default.addObserver(
-            forName: AVAudioSession.routeChangeNotification,
-            object: audioSession,
-            queue: .main
-        ) { [weak self] notification in
-            let rawValue = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
-            Task { @MainActor in
-                guard
-                    let rawValue,
-                    AVAudioSession.RouteChangeReason(rawValue: rawValue) == .oldDeviceUnavailable
-                else { return }
+            },
+            outputRouteDisconnected: { [weak self] in
                 self?.pause()
             }
-        }
-        notificationObservers.append(routeChange)
+        ))
 
         for (name, isActive) in [
             (Notification.Name.pictureInPictureDidStart, true),

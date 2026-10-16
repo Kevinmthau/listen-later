@@ -73,6 +73,8 @@ struct NowPlayingCard: View {
         case .youtube:
             youtubeSurface(item)
             titleBlock(item)
+        case .localVideo, .unknown:
+            titleBlock(item)
         }
 
         if playback.activity == .playsInYouTubeApp {
@@ -395,6 +397,8 @@ struct NowPlayingCard: View {
             socialVideoSurface
         case .youtube:
             youtubeSurface(item)
+        case .localVideo, .unknown:
+            EmptyView()
         }
 
         if playback.activity == .playsInYouTubeApp {
