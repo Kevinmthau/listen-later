@@ -76,6 +76,72 @@ final class MacPlaybackCoordinatorTests: XCTestCase {
         XCTAssertTrue(engine.isPlaying)
     }
 
+    func testCompletedItemReplaysFromTheBeginning() async throws {
+        let sharedContainer = try PersistenceController.makeContainer(inMemory: true).container
+        let localContainer = try LocalQueueStore.makeContainer(inMemory: true)
+        let shared = QueueStore(
+            context: sharedContainer.mainContext,
+            providers: ProviderRegistry(providers: [])
+        )
+        let local = LocalQueueStore(context: localContainer.mainContext)
+        let completed = podcast(title: "Completed", rank: 1)
+        completed.duration = 120
+        completed.playbackPosition = 120
+        completed.isPlayed = true
+        sharedContainer.mainContext.insert(completed)
+        try sharedContainer.mainContext.save()
+        shared.refresh()
+
+        let engine = MacTestPlaybackEngine()
+        let coordinator = MacPlaybackCoordinator(
+            sharedQueue: shared,
+            localQueue: local,
+            localMediaLibrary: temporaryLibrary(),
+            engine: engine
+        )
+        await coordinator.select(completed)
+        await coordinator.play()
+
+        XCTAssertFalse(completed.isPlayed)
+        XCTAssertEqual(completed.playbackPosition, 0)
+        XCTAssertEqual(coordinator.position, 0)
+        XCTAssertEqual(engine.seekCalls.last, 0)
+        XCTAssertTrue(engine.isPlaying)
+    }
+
+    func testUnplayableSelectionHidesPreviouslyLoadedNativePlayer() async throws {
+        let sharedContainer = try PersistenceController.makeContainer(inMemory: true).container
+        let localContainer = try LocalQueueStore.makeContainer(inMemory: true)
+        let shared = QueueStore(
+            context: sharedContainer.mainContext,
+            providers: ProviderRegistry(providers: [])
+        )
+        let local = LocalQueueStore(context: localContainer.mainContext)
+        let ready = podcast(title: "Ready", rank: 1)
+        let unavailable = podcast(title: "Unavailable", rank: 2)
+        unavailable.status = .unavailable
+        unavailable.unavailableReason = "Removed"
+        sharedContainer.mainContext.insert(ready)
+        sharedContainer.mainContext.insert(unavailable)
+        try sharedContainer.mainContext.save()
+        shared.refresh()
+
+        let engine = MacTestPlaybackEngine()
+        let coordinator = MacPlaybackCoordinator(
+            sharedQueue: shared,
+            localQueue: local,
+            localMediaLibrary: temporaryLibrary(),
+            engine: engine
+        )
+        await coordinator.select(ready)
+        XCTAssertNotNil(coordinator.nativePlayer)
+
+        await coordinator.select(unavailable)
+
+        XCTAssertNil(coordinator.nativePlayer)
+        XCTAssertFalse(engine.isPlaying)
+    }
+
     func testAutomaticPlaybackSkipsMissingLocalBytesWithoutMutatingStatus() async throws {
         let sharedContainer = try PersistenceController.makeContainer(inMemory: true).container
         let localContainer = try LocalQueueStore.makeContainer(inMemory: true)
@@ -459,7 +525,8 @@ private final class MacTestPlaybackEngine: PodcastPlaybackEngine {
     private(set) var loadedURLs: [URL] = []
     private(set) var seekCalls: [TimeInterval] = []
     private(set) var rateCalls: [Float] = []
-    var renderingPlayer: AVPlayer? { nil }
+    private let player = AVPlayer()
+    var renderingPlayer: AVPlayer? { player }
     private var loadID: UUID?
 
     func load(url: URL, position: TimeInterval, rate: Float, loadID: UUID) {

@@ -35,7 +35,9 @@ final class MacPlaybackCoordinator {
         item(id: currentItemID)
     }
 
-    var nativePlayer: AVPlayer? { engine.renderingPlayer }
+    var nativePlayer: AVPlayer? {
+        activeLoadID == nil ? nil : engine.renderingPlayer
+    }
 
     init(
         sharedQueue: QueueStore,
@@ -80,6 +82,8 @@ final class MacPlaybackCoordinator {
         if state == .paused, activeLoadID != nil {
             if item.isPlayed {
                 markUnplayed(item)
+                position = 0
+                engine.seek(to: 0)
             }
             engine.play()
             state = .playing
@@ -318,6 +322,10 @@ final class MacPlaybackCoordinator {
     }
 
     private func load(url: URL, item: QueueItem, autoplay: Bool) {
+        if autoplay, item.isPlayed {
+            markUnplayed(item)
+            position = 0
+        }
         let loadID = UUID()
         activeLoadID = loadID
         engine.load(
@@ -327,9 +335,6 @@ final class MacPlaybackCoordinator {
             loadID: loadID
         )
         if autoplay {
-            if item.isPlayed {
-                markUnplayed(item)
-            }
             engine.play()
             state = .playing
             recordPlaybackStarted(for: item)
