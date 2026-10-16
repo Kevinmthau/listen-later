@@ -1,14 +1,15 @@
 # MushRadio
 
-MushRadio is a native iPhone app with one ordered queue for podcast episodes,
-X/Instagram videos, and YouTube videos. It is intentionally not a discovery
-app: add a public URL from the iOS Share Sheet or paste one into the app, then
-press Play.
+MushRadio is a native iPhone, iPad, and Mac app with one ordered queue for
+podcast episodes, X/Instagram videos, YouTube videos, and Mac-imported movie
+files. It is intentionally not a discovery app: add a public URL from the iOS
+Share Sheet or either app, or import a movie on Mac, then press Play.
 
-The minimum deployment target is iOS 17 because the app uses SwiftData. The app
-is built with SwiftUI, SwiftData and CloudKit; podcasts and resolved social
-videos use AVFoundation and MediaPlayer; YouTube uses public oEmbed metadata,
-the optional YouTube Data API, and the IFrame Player API.
+The minimum deployment targets are iOS 17 and macOS 14 because the apps use
+SwiftData. They are built with SwiftUI, SwiftData, and CloudKit. Podcasts,
+resolved social videos, and local movies use AVFoundation; YouTube uses public
+oEmbed metadata everywhere, plus an optional iOS-restricted Data API key and
+the IFrame Player API in the iOS app.
 
 > [!IMPORTANT]
 > YouTube does not permit third-party API clients to extract audio, download
@@ -33,6 +34,11 @@ flowchart TD
     Grabber --> Native
     YouTube --> IFrame["Visible WKWebView<br>YouTube IFrame Player API"]
     Queue <--> Store["SwiftData store<br>App Group + private CloudKit"]
+    Finder["Mac file picker or Finder drop"] --> Import["Atomic local import<br>validate + optional poster"]
+    Import --> LocalQueue["Local-only SwiftData queue rows"]
+    Import --> LocalBytes["Application Support<br>app-owned movie bytes"]
+    Store --> MacQueue["Mac merged queue view"]
+    LocalQueue --> MacQueue
 ```
 
 Key implementation boundaries:
@@ -61,6 +67,14 @@ Key implementation boundaries:
 - `QueueStore` persists queue order, item state, and playback progress. A
   CloudKit-backed SwiftData store synchronizes those values through the user’s
   private iCloud database; foreground refreshes reconcile remote changes.
+- `ListenLaterMac` presents a native split view and merges the CloudKit-backed
+  link queue with a separate local-only SwiftData queue. Finder drops and the
+  file importer copy movies into app-owned Application Support storage using a
+  staged, validated, atomic commit.
+- Mac local-video rows and movie bytes never enter CloudKit. This is a deliberate
+  compatibility boundary: an already-installed iOS build cannot misinterpret a
+  new `localVideo` source as a podcast. Unknown source values in newer data are
+  also rendered as unsupported rather than falling back to podcast behavior.
 - Colours come from the icon’s walnut and brass. `Design/README.md` lists the
   colour tokens, their contrast ratios, and how the icon’s dark and tinted
   versions were made.
@@ -131,6 +145,7 @@ Relevant official references:
 ## Requirements
 
 - Xcode with the iOS 17 SDK or newer
+- macOS 14 or newer for the Mac app
 - An active Apple Developer Program membership with permission to create App
   Groups and iCloud containers
 - An iPhone or iPad signed into iCloud for CloudKit and background-audio
@@ -247,6 +262,8 @@ The checked-in project contains these targets and identifiers:
 | `ListenLater` | Containing iOS app | `com.kevinthau.ListenLater` |
 | `ListenLaterShare` | “Add to Queue” Share Extension | `com.kevinthau.ListenLater.AddToQueue` |
 | `ListenLaterTests` | Unit-test bundle | `com.kevinthau.ListenLaterTests` |
+| `ListenLaterMac` | Native macOS app | `com.kevinthau.ListenLaterMac` |
+| `ListenLaterMacTests` | macOS unit-test bundle | `com.kevinthau.ListenLaterMacTests` |
 
 The repository’s shared identifiers are:
 
@@ -258,7 +275,7 @@ ICLOUD_CONTAINER_IDENTIFIER = iCloud.com.kevinthau.ListenLater
 If you use a different organization or bundle identifier, update the following
 as one coordinated change:
 
-- All three target bundle identifiers
+- All five target bundle identifiers
 - `APP_GROUP_IDENTIFIER` and `ICLOUD_CONTAINER_IDENTIFIER` in
   `Config/Base.xcconfig`
 - The App Group and iCloud container registrations in the Apple Developer
@@ -266,7 +283,7 @@ as one coordinated change:
 - The `com.apple.developer.ubiquity-kvstore-identifier` value in
   `ListenLater/ListenLater.entitlements`
 - The iOS bundle identifier allowed by the Google API key
-- Provisioning profiles for both targets
+- Provisioning profiles for the iOS app, Share Extension, and Mac app
 
 Configure the containing app target:
 
@@ -281,6 +298,16 @@ Configure the Share Extension target:
 - **App Groups**: enable the exact same App Group
 - Do not give the extension background-audio or CloudKit capabilities; it uses
   the shared inbox and the containing app performs resolution and persistence.
+
+Configure the Mac app target:
+
+- **App Sandbox**: enable outgoing network connections and user-selected file
+  read access.
+- **App Groups**: enable `group.com.kevinthau.ListenLater`.
+- **iCloud**: enable CloudKit and select
+  `iCloud.com.kevinthau.ListenLater`.
+- Do not add broad file-system entitlements. The security-scoped file-picker
+  permission is held only while the selected movie is copied into the sandbox.
 
 Apple documents these steps in
 [Adding capabilities](https://developer.apple.com/documentation/xcode/adding-capabilities-to-your-app),
@@ -350,6 +377,54 @@ copies types, fields, and indexes, not development records. Production schemas
 are effectively additive: plan migrations before promotion because deployed
 types and fields cannot simply be removed. See Apple’s
 [schema deployment guide](https://developer.apple.com/documentation/cloudkit/deploying-an-icloud-container-s-schema).
+
+### Cross-version and local-video compatibility
+
+The shared `QueueItem` schema gained only optional or defaulted local-media
+fields. Link-backed records continue to use the same CloudKit store and record
+shape, and their source values remain `podcast`, `socialVideo`, or `youtube`.
+The Mac app never inserts `localVideo` into that container: it writes dedicated
+`LocalQueueRecord` rows to the non-CloudKit `ListenLaterMacLocalQueue`
+configuration instead.
+
+That split is required for safe staged rollout. Existing iOS versions treat an
+unrecognized source value as podcast, so syncing a local-video record would be
+unsafe even if the movie bytes were absent. Keeping the entire row local means
+old and current iOS installations see exactly the shared link queue they
+already understand. The current model also maps genuinely unknown future
+values to an explicit unsupported source as defense in depth.
+
+## macOS app and local movie lifecycle
+
+Select the `ListenLaterMac` scheme to run the native macOS 14 app. It uses a
+`NavigationSplitView` queue, keyboard commands, Settings scene, context menus,
+drag reordering, file importer, and Finder URL drops. Podcasts and resolved
+social videos use the shared native playback engine. YouTube always opens the
+official app or website on Mac; Mac metadata resolution intentionally passes an
+empty Data API key and uses public oEmbed rather than silently reusing the
+iOS-bundle-restricted credential.
+
+Movie import is transactional:
+
+1. MushRadio starts security-scoped access to each selected Finder URL.
+2. It copies the file into an app-owned `.partial-<UUID>` staging directory.
+3. AVFoundation verifies that the copy is playable, has a video track, and has
+   a positive finite duration; it also reads dimensions and best-effort creates
+   a poster JPEG.
+4. The staging directory is atomically renamed into
+   `Application Support/MushRadio/LocalMedia/Media/<UUID>`.
+5. Only then is a local SwiftData row saved, containing a UUID, sanitized
+   filenames, title, duration, and dimensions—never the original path, a
+   security-scoped bookmark, or media bytes.
+
+Cancellation or validation failure removes the partial copy. Startup removes
+stale partials, moves unreferenced owned media into the internal Trash, and
+derives availability from the copied file at runtime. Missing bytes show **Not
+on this Mac** and automatic playback skips the row without marking it played or
+unavailable. Delete removes the local metadata first and then moves only the
+UUID-derived owned directory to internal Trash; Undo can restore both. Trash is
+purged after seven days. No cleanup operation accepts or deletes an external
+user path.
 
 ## Share Extension setup and verification
 
@@ -435,6 +510,17 @@ xcodebuild \
   build
 ```
 
+Mac Debug build:
+
+```sh
+xcodebuild \
+  -project ListenLater.xcodeproj \
+  -scheme ListenLaterMac \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  build
+```
+
 If that simulator is not installed, replace the destination with one listed by
 `xcrun simctl list devices available`.
 
@@ -463,8 +549,8 @@ xcodebuild \
   test
 ```
 
-The 72-test automated suite is deterministic and does not require a live API
-key or network access:
+The 168-test automated suite is deterministic and does not require a live API
+key or network access: 153 existing iOS tests plus 15 Mac-specific tests.
 
 - `ProviderParsingTests` covers supported and hostile YouTube and social-video
   URL forms, video-grabber request/response behavior, expiration handling,
@@ -485,6 +571,25 @@ key or network access:
 - `SharedQueueInboxTests` verifies chronological atomic-file handoff and retry
   behavior, cross-process notifications, receipt-idempotent relaunch recovery,
   multi-receipt staging, and malformed-file quarantine.
+- `LocalMediaLibraryTests` verifies staged commit, failed-import cleanup,
+  symbolic-link rejection, relaunch availability, internal Trash/Undo and its
+  retention clock, orphan reconciliation, and stale partial cleanup without
+  touching external paths.
+- `LocalQueueCompatibilityTests` verifies the non-CloudKit local store,
+  snapshot round trips, no share URL for local movies, and safe unknown-source
+  handling.
+- `MacPlaybackCoordinatorTests` verifies automatic skip of missing local bytes
+  without mutating ready/played state and rejects stale async playback starts.
+
+Run the Mac suite separately:
+
+```sh
+xcodebuild \
+  -project ListenLater.xcodeproj \
+  -scheme ListenLaterMac \
+  -destination 'platform=macOS' \
+  test
+```
 
 GitHub Actions runs the same suite on an iOS Simulator for every pull request
 and push to `main` (`.github/workflows/ci.yml`). The workflow also regenerates
@@ -577,6 +682,25 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
 - [ ] Test while signed out of iCloud and after signing back in.
 - [ ] Confirm local-only fallback shows a crossed-out cloud beside the
   Settings gear rather than being mistaken for active sync.
+
+### Mac local movies
+
+- [ ] Import several `.mov`/`.mp4` files through the picker and by dragging
+  them from Finder; confirm the original files can be moved afterward and the
+  copied movies still play.
+- [ ] Cancel a large import and try a corrupt or audio-only file; confirm no
+  queue row or partial media directory remains.
+- [ ] Relaunch the app and confirm local rows, posters, order, and progress are
+  restored from local storage.
+- [ ] Remove a copied movie while the app is closed; confirm the row says **Not
+  on this Mac**, is skipped automatically, and is not marked played or
+  unavailable.
+- [ ] Delete a local movie, use Undo, then allow an internal Trash item to age
+  past seven days and confirm maintenance removes it.
+- [ ] On an iPhone running the previous shipping build, confirm Mac imports do
+  not appear while new link-backed additions and reorders still sync.
+- [ ] Confirm YouTube opens externally on Mac and no iOS-restricted Data API
+  credential is sent by the Mac target.
 
 ### Look and feel
 
@@ -675,9 +799,11 @@ privacy policy or legal terms.
   usually both survive; two devices moving the same item keep the later move.
 - The MVP streams media and does not download podcasts or social videos for
   offline listening.
-- There are no recommendations, discovery feeds, accounts, CarPlay UI, Apple
-  Watch app, or macOS-specific interface. On iPad (regular width), the player
-  and the queue sit side by side.
+- There are no recommendations, discovery feeds, accounts, CarPlay UI, or Apple
+  Watch app. On iPad (regular width), the player and the queue sit side by side.
+- Imported movie bytes are intentionally local to one Mac. Other Macs and iOS
+  devices receive only link-backed queue items; moving a local movie between
+  Macs requires importing it separately on the destination Mac.
 - CloudKit production schema promotion and the in-app YouTube privacy/terms
   acceptance flow are release gates, not optional polish.
 

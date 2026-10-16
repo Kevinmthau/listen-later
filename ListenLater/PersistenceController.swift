@@ -11,8 +11,15 @@ enum AppConfiguration {
         ?? "iCloud.com.kevinthau.ListenLater"
 
     static let youtubeAPIKey: String = {
+        #if os(macOS)
+        // The checked-in credential setup is restricted to the iOS bundle.
+        // macOS deliberately uses public oEmbed metadata and external
+        // YouTube playback rather than weakening that restriction.
+        return ""
+        #else
         let value = Bundle.main.object(forInfoDictionaryKey: "YOUTUBE_API_KEY") as? String
         return YouTubeAPIConfiguration(apiKey: value ?? "").apiKey
+        #endif
     }()
 
     static let videoGrabberEndpoint: URL = {

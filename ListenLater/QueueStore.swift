@@ -124,6 +124,8 @@ final class QueueStore {
             placeholderTitle = "\(platform ?? "Social") video"
         case .youtube:
             placeholderTitle = "YouTube video"
+        case .localVideo, .unknown:
+            placeholderTitle = "Unsupported item"
         }
         let item = QueueItem(
             originalURL: url,
@@ -415,6 +417,20 @@ final class QueueStore {
                 }
                 await self.resolve(item)
             }
+        }
+    }
+
+    /// Applies ranks from a merged Mac queue to the rows owned by this store.
+    func updateSortRanks(_ ranks: [UUID: Double]) {
+        var changed = false
+        for item in items {
+            guard let rank = ranks[item.id], item.sortRank != rank else { continue }
+            item.sortRank = rank
+            item.updatedAt = Date()
+            changed = true
+        }
+        if changed {
+            saveAndRefresh()
         }
     }
 
@@ -778,7 +794,10 @@ final class QueueStore {
     private func applyRanks(to reordered: [QueueItem], moved: [QueueItem]) {
         guard reordered.map(\.id) != items.map(\.id) else { return }
         let now = Date()
-        if let ranks = Self.ranks(for: reordered, preferringToMove: Set(moved.map(\.id))) {
+        if let ranks = Self.sparseSortRanks(
+            for: reordered,
+            preferringToMove: Set(moved.map(\.id))
+        ) {
             for item in reordered {
                 guard let rank = ranks[item.id] else { continue }
                 item.sortRank = rank
@@ -806,7 +825,7 @@ final class QueueStore {
     /// among runs of equal length, the one that keeps the most items outside
     /// `preferredIDs`. The others are spread evenly between the kept items on
     /// either side.
-    private static func ranks(
+    static func sparseSortRanks(
         for reordered: [QueueItem],
         preferringToMove preferredIDs: Set<UUID>
     ) -> [UUID: Double]? {

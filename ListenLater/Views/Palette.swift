@@ -29,6 +29,10 @@ enum Palette {
             [Color(hex: 0x1F1A17), Color(hex: 0x5B4636)]
         case .youtube:
             [Color(hex: 0x6E1B14), Color(hex: 0xC0392B)]
+        case .localVideo:
+            [Color(hex: 0x30465C), Color(hex: 0x101820)]
+        case .unknown:
+            [Color.gray, Color.black]
         }
     }
 }

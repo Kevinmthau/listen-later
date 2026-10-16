@@ -11,6 +11,7 @@
 		89BDF6E032D677D5D05C3539 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90B6BBF965A6D0E78F79B0D /* AppModel.swift */; };
 		C053BC3E053CB520A1481FB3 /* ListenLaterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 169023F72A600048449B6163 /* ListenLaterApp.swift */; };
 		C5DEF96A9BFB22477940DA41 /* PersistenceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009F64E8D854705DABB7A63D /* PersistenceController.swift */; };
+		B880AB55BAEAB2BF1A42C1BB /* AudioSessionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BABEC39D2A7FFAEAC45DB25 /* AudioSessionAdapter.swift */; };
 		0EAA8AE44AB8E95DA11F920C /* PlaybackCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA6A84569640208B75A75D82 /* PlaybackCoordinator.swift */; };
 		F60F86D739726DA3FF19C53C /* PlaybackPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB247772E9D07020F62877D3 /* PlaybackPreferences.swift */; };
 		28645438419D7A6752312829 /* PodcastPlaybackEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7624932610E8ABD5A68807C4 /* PodcastPlaybackEngine.swift */; };
@@ -64,7 +65,69 @@
 		4B1DCFB47332FB9391AA9E02 /* RSSFeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75518713AB8C2D07FE26AD46 /* RSSFeedTests.swift */; };
 		A9D7064BE6A8B95CC71A5227 /* SharedQueueInboxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52748E0F1A61378A4CBEE6F6 /* SharedQueueInboxTests.swift */; };
 		08E4AABCF5764F394D8146A5 /* VideoFrameLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFCE787AA70EFD4A79A45FE6 /* VideoFrameLayoutTests.swift */; };
+		05170E64BCC66F8F739006DC /* ListenLaterMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0149117C3E7A8D0371F8B1B /* ListenLaterMacApp.swift */; };
+		795E125DE4106BDD6A738997 /* LocalMediaLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F852766F4BBE32C3AD4D2A6 /* LocalMediaLibrary.swift */; };
+		A4E08E1428C7C05FBF5BA740 /* LocalQueueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5173238320496D3EB0895995 /* LocalQueueStore.swift */; };
+		F8F927D365F7428129419329 /* MacAddLinkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 232090696E2AEB3E9FA9B71E /* MacAddLinkView.swift */; };
+		A9633B2AFBA6CA84B79F9A4E /* MacAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6F19C9E101FB04606832E63 /* MacAppModel.swift */; };
+		D4DD85FDE0A2AC5E01E9179C /* MacPlaybackCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6601561A20BD59C0A84CE10E /* MacPlaybackCoordinator.swift */; };
+		7DAEAB1362B82FF05FBF213F /* MacPlayerDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 656022F995477EBF1C5F0E24 /* MacPlayerDetailView.swift */; };
+		2CCE3C2BFBDD480EC04BE50B /* MacRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C29C1A6A1CADBCFDB5093432 /* MacRootView.swift */; };
+		5F9D7FF7A43DE2D1C40B1A6B /* MacSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11B7078CA012349D6786E9DD /* MacSettingsView.swift */; };
+		B0B1A79FE68AE887B8B1A07B /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED5496097121F87974A51F4A /* Formatting.swift */; };
+		D4286CE82FF2680F8A1B929C /* MediaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE354E16BE118D90E05EBA13 /* MediaSource.swift */; };
+		836390A6825B396E556605A0 /* QueueItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A91D3E687A9029174BB0074E /* QueueItem.swift */; };
+		674B2D462E8A73B396632A8F /* ApplePodcastsLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6029DEE34D30A8BD43F3F37 /* ApplePodcastsLink.swift */; };
+		87CA122684693DA8BA960E9F /* ApplePodcastsLookupResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E3F0921A914151DD511F64 /* ApplePodcastsLookupResolver.swift */; };
+		E01FEE74AFE46E4EF159686B /* HTMLRSSDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A12D281A6A30A1A67BCC69C /* HTMLRSSDiscovery.swift */; };
+		55FEC454A96C2AFE28DB8439 /* LinkClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = B80BDB415EDBCF6FB3C965B2 /* LinkClassifier.swift */; };
+		5E97077D433D8C3874E48DF7 /* PodcastProviderAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BF992F63493FDC7284F4268 /* PodcastProviderAdapter.swift */; };
+		3707C591CBA26C7778BC2A6C /* PodcastResolutionSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CD9FCE3DA0C91033922FC25 /* PodcastResolutionSupport.swift */; };
+		16ED3D257269F1BEC4A11679 /* ProviderHTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00F04D538D6CDAC50240D3E /* ProviderHTTPClient.swift */; };
+		5D131FC795D163312E300F32 /* ProviderModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BB8C9FA5E7A057BF29C22D6 /* ProviderModels.swift */; };
+		734200937DA22ADA3E5DF0D8 /* ProviderParsingSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D0E30697F0A40A361CD770D /* ProviderParsingSupport.swift */; };
+		524EAD1034BAD37F3AB05BF8 /* ProviderRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B48A1AFA931CCADEA19F4DC4 /* ProviderRegistry.swift */; };
+		63F02816CF268D246F1F6424 /* RSSFeedParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892529E27A21C15419B7F77D /* RSSFeedParser.swift */; };
+		1945BD05B089EAD34B4CDBBB /* SocialVideoURLParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10B424BF801610860BC92B6A /* SocialVideoURLParser.swift */; };
+		274D78A0ACC59499A49239A3 /* VideoGrabberProviderAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72BBFA167D0526CAE5113FCB /* VideoGrabberProviderAdapter.swift */; };
+		17395484E4B6E753AC0FD294 /* YouTubeProviderAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6CE660DD74D933BAA1E186D /* YouTubeProviderAdapter.swift */; };
+		626BDC5713D1867F5C094245 /* YouTubeURLParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10D57B1B036B2431741B7C3 /* YouTubeURLParser.swift */; };
+		57DE89C38D4AFF0DDC8BAF22 /* SharedQueueInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = C040A9146F1E313D85004296 /* SharedQueueInbox.swift */; };
+		AA900D2EBAAAF934F2F1776A /* PersistenceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009F64E8D854705DABB7A63D /* PersistenceController.swift */; };
+		9EC22EE2864C9B69349EF2A3 /* QueueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18E8789D968FD752ECE3DE82 /* QueueStore.swift */; };
+		B992EEADD686C03A9F46F259 /* PodcastPlaybackEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7624932610E8ABD5A68807C4 /* PodcastPlaybackEngine.swift */; };
+		1F27A3AAA1B3015C5DEC278D /* LocalMediaLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6949582589B6C485DC16DA8F /* LocalMediaLibraryTests.swift */; };
+		211D3139C210381DDD87B8F5 /* LocalQueueCompatibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2686CB50B69469CDA369A4B /* LocalQueueCompatibilityTests.swift */; };
+		3F12A26BE83D75FBC29CEE79 /* MacAppModelReconciliationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6FD36EF5F0608D597F8EBB0 /* MacAppModelReconciliationTests.swift */; };
+		2817DB2880E3673C876A44E0 /* MacPlaybackCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FFF420F59194A529AE37EB8 /* MacPlaybackCoordinatorTests.swift */; };
+		EEBAB0A082B14B0A3AFE76B8 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED5496097121F87974A51F4A /* Formatting.swift */; };
+		63DF70797F6E8472258EAD58 /* MediaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE354E16BE118D90E05EBA13 /* MediaSource.swift */; };
+		617B5CD54A550A1292B30E99 /* QueueItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A91D3E687A9029174BB0074E /* QueueItem.swift */; };
+		29B86C943627DDA6CDF24865 /* ApplePodcastsLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6029DEE34D30A8BD43F3F37 /* ApplePodcastsLink.swift */; };
+		95F7B20AC7A1E90E63DAAC8B /* ApplePodcastsLookupResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E3F0921A914151DD511F64 /* ApplePodcastsLookupResolver.swift */; };
+		89CD891B76EEAD86FFAC8E73 /* HTMLRSSDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A12D281A6A30A1A67BCC69C /* HTMLRSSDiscovery.swift */; };
+		C8C8712A84DE0DACD200B985 /* LinkClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = B80BDB415EDBCF6FB3C965B2 /* LinkClassifier.swift */; };
+		5E56A22D13197CD4EA3234B6 /* PodcastProviderAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BF992F63493FDC7284F4268 /* PodcastProviderAdapter.swift */; };
+		D46B24222519ADC7F491BA26 /* PodcastResolutionSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CD9FCE3DA0C91033922FC25 /* PodcastResolutionSupport.swift */; };
+		D6FA7CEC29541D97B49404CA /* ProviderHTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00F04D538D6CDAC50240D3E /* ProviderHTTPClient.swift */; };
+		2759F7448089FF4ABECBAD88 /* ProviderModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BB8C9FA5E7A057BF29C22D6 /* ProviderModels.swift */; };
+		4591EF3223B754A2D94500F2 /* ProviderParsingSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D0E30697F0A40A361CD770D /* ProviderParsingSupport.swift */; };
+		F78475CF8211DA610980A689 /* ProviderRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B48A1AFA931CCADEA19F4DC4 /* ProviderRegistry.swift */; };
+		89982E3882F222B10476565C /* RSSFeedParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892529E27A21C15419B7F77D /* RSSFeedParser.swift */; };
+		8604774A90D3DE8B02CC3CB4 /* SocialVideoURLParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10B424BF801610860BC92B6A /* SocialVideoURLParser.swift */; };
+		C173A997D64D31675440BB3F /* VideoGrabberProviderAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72BBFA167D0526CAE5113FCB /* VideoGrabberProviderAdapter.swift */; };
+		1FFF3A837DA46982C475867D /* YouTubeProviderAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6CE660DD74D933BAA1E186D /* YouTubeProviderAdapter.swift */; };
+		9C27FF55F6AA806FCA1B8676 /* YouTubeURLParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10D57B1B036B2431741B7C3 /* YouTubeURLParser.swift */; };
+		6CD72291E81EFEDCC1041B7E /* SharedQueueInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = C040A9146F1E313D85004296 /* SharedQueueInbox.swift */; };
+		E6203702629AB1B3E7504CF7 /* PersistenceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009F64E8D854705DABB7A63D /* PersistenceController.swift */; };
+		A1C6571163C0D3A940186F3B /* QueueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18E8789D968FD752ECE3DE82 /* QueueStore.swift */; };
+		3D4A9AB64E6BC5ACDDF84205 /* PodcastPlaybackEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7624932610E8ABD5A68807C4 /* PodcastPlaybackEngine.swift */; };
+		DB3482D48B353CA957659A61 /* LocalMediaLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F852766F4BBE32C3AD4D2A6 /* LocalMediaLibrary.swift */; };
+		3B6D984E6488C46B405BE26F /* LocalQueueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5173238320496D3EB0895995 /* LocalQueueStore.swift */; };
+		502B20A9ECBC4185F88330F1 /* MacAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6F19C9E101FB04606832E63 /* MacAppModel.swift */; };
+		A7F133080DBB84C9A746A446 /* MacPlaybackCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6601561A20BD59C0A84CE10E /* MacPlaybackCoordinator.swift */; };
 		356A7E984C3F437F33DEEE59 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C0ECD60F619A829BDEFDF42D /* Assets.xcassets */; };
+		BAD18BC9C1BA8352DF757475 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 81F519774CE50204BA4EA1FE /* Assets.xcassets */; };
 		4DCDB36651C0A66AE856B5B1 /* ListenLaterShare.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = E71C90507EE7525A9470A6D9 /* ListenLaterShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -90,6 +153,7 @@
 		F90B6BBF965A6D0E78F79B0D /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel.swift"; sourceTree = "<group>"; };
 		169023F72A600048449B6163 /* ListenLaterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ListenLaterApp.swift"; sourceTree = "<group>"; };
 		009F64E8D854705DABB7A63D /* PersistenceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PersistenceController.swift"; sourceTree = "<group>"; };
+		2BABEC39D2A7FFAEAC45DB25 /* AudioSessionAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Playback/AudioSessionAdapter.swift"; sourceTree = "<group>"; };
 		AA6A84569640208B75A75D82 /* PlaybackCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Playback/PlaybackCoordinator.swift"; sourceTree = "<group>"; };
 		DB247772E9D07020F62877D3 /* PlaybackPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Playback/PlaybackPreferences.swift"; sourceTree = "<group>"; };
 		7624932610E8ABD5A68807C4 /* PodcastPlaybackEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Playback/PodcastPlaybackEngine.swift"; sourceTree = "<group>"; };
@@ -142,17 +206,37 @@
 		75518713AB8C2D07FE26AD46 /* RSSFeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RSSFeedTests.swift"; sourceTree = "<group>"; };
 		52748E0F1A61378A4CBEE6F6 /* SharedQueueInboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SharedQueueInboxTests.swift"; sourceTree = "<group>"; };
 		EFCE787AA70EFD4A79A45FE6 /* VideoFrameLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VideoFrameLayoutTests.swift"; sourceTree = "<group>"; };
+		D0149117C3E7A8D0371F8B1B /* ListenLaterMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ListenLaterMacApp.swift"; sourceTree = "<group>"; };
+		6F852766F4BBE32C3AD4D2A6 /* LocalMediaLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocalMediaLibrary.swift"; sourceTree = "<group>"; };
+		5173238320496D3EB0895995 /* LocalQueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocalQueueStore.swift"; sourceTree = "<group>"; };
+		232090696E2AEB3E9FA9B71E /* MacAddLinkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MacAddLinkView.swift"; sourceTree = "<group>"; };
+		D6F19C9E101FB04606832E63 /* MacAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MacAppModel.swift"; sourceTree = "<group>"; };
+		6601561A20BD59C0A84CE10E /* MacPlaybackCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MacPlaybackCoordinator.swift"; sourceTree = "<group>"; };
+		656022F995477EBF1C5F0E24 /* MacPlayerDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MacPlayerDetailView.swift"; sourceTree = "<group>"; };
+		C29C1A6A1CADBCFDB5093432 /* MacRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MacRootView.swift"; sourceTree = "<group>"; };
+		11B7078CA012349D6786E9DD /* MacSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MacSettingsView.swift"; sourceTree = "<group>"; };
+		81F519774CE50204BA4EA1FE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Assets.xcassets"; sourceTree = "<group>"; };
+		0A630D43D6D1DE060BFAA029 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info.plist"; sourceTree = "<group>"; };
+		DE53EBC45E7D4C2784553A70 /* ListenLaterMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "ListenLaterMac.entitlements"; sourceTree = "<group>"; };
+		6949582589B6C485DC16DA8F /* LocalMediaLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocalMediaLibraryTests.swift"; sourceTree = "<group>"; };
+		F2686CB50B69469CDA369A4B /* LocalQueueCompatibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocalQueueCompatibilityTests.swift"; sourceTree = "<group>"; };
+		D6FD36EF5F0608D597F8EBB0 /* MacAppModelReconciliationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MacAppModelReconciliationTests.swift"; sourceTree = "<group>"; };
+		8FFF420F59194A529AE37EB8 /* MacPlaybackCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MacPlaybackCoordinatorTests.swift"; sourceTree = "<group>"; };
 		50778595AA221B068518C8A3 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Base.xcconfig"; sourceTree = "<group>"; };
 		B634E8A392A66625328866F0 /* Secrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Secrets.xcconfig.example"; sourceTree = "<group>"; };
 		B6CDB6E5D160E013280D3C68 /* ListenLater.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ListenLater.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E71C90507EE7525A9470A6D9 /* ListenLaterShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ListenLaterShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E02A90D9643568EA39115CFB /* ListenLaterTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ListenLaterTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3B0BB3AAC6141AA5CDB947A5 /* ListenLaterMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ListenLaterMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A4BF11F11ABDC1C2B53952A /* ListenLaterMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ListenLaterMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		F001BC2AF9EB5498B3360756 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		F26748C5453EEE5006F23BFE /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		F115AF690239BFBFCB7B4DE6 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		B499CB35E63B0E3D3E339DFB /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		9758B3FD72109B50BE74559C /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -163,6 +247,8 @@
 				FC8F5A85394B0D5FF7E93AFA /* ListenLaterCore */,
 				13407D3C6CA3655F92F93B61 /* ListenLaterShare */,
 				EEFE21A1443933CA4DE017DA /* ListenLaterTests */,
+				2C246FC45EEF3E8FF39E752F /* ListenLaterMac */,
+				F05EAE4F6E585E32C13FBF1E /* ListenLaterMacTests */,
 				D35BDCF6803CCB1A9C4483A8 /* Config */,
 				00C45FD35CB0F9C5F764F070 /* Products */,
 			);
@@ -175,6 +261,7 @@
 				F90B6BBF965A6D0E78F79B0D /* AppModel.swift */,
 				169023F72A600048449B6163 /* ListenLaterApp.swift */,
 				009F64E8D854705DABB7A63D /* PersistenceController.swift */,
+				2BABEC39D2A7FFAEAC45DB25 /* AudioSessionAdapter.swift */,
 				AA6A84569640208B75A75D82 /* PlaybackCoordinator.swift */,
 				DB247772E9D07020F62877D3 /* PlaybackPreferences.swift */,
 				7624932610E8ABD5A68807C4 /* PodcastPlaybackEngine.swift */,
@@ -252,6 +339,36 @@
 			path = ListenLaterTests;
 			sourceTree = "<group>";
 		};
+		2C246FC45EEF3E8FF39E752F /* ListenLaterMac */ = {
+			isa = PBXGroup;
+			children = (
+				D0149117C3E7A8D0371F8B1B /* ListenLaterMacApp.swift */,
+				6F852766F4BBE32C3AD4D2A6 /* LocalMediaLibrary.swift */,
+				5173238320496D3EB0895995 /* LocalQueueStore.swift */,
+				232090696E2AEB3E9FA9B71E /* MacAddLinkView.swift */,
+				D6F19C9E101FB04606832E63 /* MacAppModel.swift */,
+				6601561A20BD59C0A84CE10E /* MacPlaybackCoordinator.swift */,
+				656022F995477EBF1C5F0E24 /* MacPlayerDetailView.swift */,
+				C29C1A6A1CADBCFDB5093432 /* MacRootView.swift */,
+				11B7078CA012349D6786E9DD /* MacSettingsView.swift */,
+				81F519774CE50204BA4EA1FE /* Assets.xcassets */,
+				0A630D43D6D1DE060BFAA029 /* Info.plist */,
+				DE53EBC45E7D4C2784553A70 /* ListenLaterMac.entitlements */,
+			);
+			path = ListenLaterMac;
+			sourceTree = "<group>";
+		};
+		F05EAE4F6E585E32C13FBF1E /* ListenLaterMacTests */ = {
+			isa = PBXGroup;
+			children = (
+				6949582589B6C485DC16DA8F /* LocalMediaLibraryTests.swift */,
+				F2686CB50B69469CDA369A4B /* LocalQueueCompatibilityTests.swift */,
+				D6FD36EF5F0608D597F8EBB0 /* MacAppModelReconciliationTests.swift */,
+				8FFF420F59194A529AE37EB8 /* MacPlaybackCoordinatorTests.swift */,
+			);
+			path = ListenLaterMacTests;
+			sourceTree = "<group>";
+		};
 		D35BDCF6803CCB1A9C4483A8 /* Config */ = {
 			isa = PBXGroup;
 			children = (
@@ -267,6 +384,8 @@
 				B6CDB6E5D160E013280D3C68 /* ListenLater.app */,
 				E71C90507EE7525A9470A6D9 /* ListenLaterShare.appex */,
 				E02A90D9643568EA39115CFB /* ListenLaterTests.xctest */,
+				3B0BB3AAC6141AA5CDB947A5 /* ListenLaterMac.app */,
+				1A4BF11F11ABDC1C2B53952A /* ListenLaterMacTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -307,6 +426,28 @@
 			productReference = E02A90D9643568EA39115CFB /* ListenLaterTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		23E6EB9256AB02C8FDCB22A5 /* ListenLaterMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E97E1AC380FB80620FB311E9 /* Build configuration list for PBXNativeTarget "ListenLaterMac" */;
+			buildPhases = (6328831100BFA1C9C3BE948D /* Sources */, B499CB35E63B0E3D3E339DFB /* Frameworks */, 77D911E72F2E007FDAFB205A /* Resources */, );
+			buildRules = ();
+			dependencies = ();
+			name = ListenLaterMac;
+			productName = ListenLaterMac;
+			productReference = 3B0BB3AAC6141AA5CDB947A5 /* ListenLaterMac.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D9F46B7C6688A2DFCFE4888A /* ListenLaterMacTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 990E0853C6BE8C34BFAE85BA /* Build configuration list for PBXNativeTarget "ListenLaterMacTests" */;
+			buildPhases = (F9C0FE0D27D896CB89592C45 /* Sources */, 9758B3FD72109B50BE74559C /* Frameworks */, 0AEAD9179DA6ACAAEF79384F /* Resources */, );
+			buildRules = ();
+			dependencies = ();
+			name = ListenLaterMacTests;
+			productName = ListenLaterMacTests;
+			productReference = 1A4BF11F11ABDC1C2B53952A /* ListenLaterMacTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -320,6 +461,8 @@
 					29C7B681C8D62CBAC94D51C0 = {CreatedOnToolsVersion = 26.6; };
 					1A6609CC8685B17F5F513A3B = {CreatedOnToolsVersion = 26.6; };
 					7EC8F98B7A265120217712DE = {CreatedOnToolsVersion = 26.6; TestTargetID = 29C7B681C8D62CBAC94D51C0; };
+					23E6EB9256AB02C8FDCB22A5 = {CreatedOnToolsVersion = 26.6; };
+					D9F46B7C6688A2DFCFE4888A = {CreatedOnToolsVersion = 26.6; TestTargetID = 23E6EB9256AB02C8FDCB22A5; };
 				};
 			};
 			buildConfigurationList = FCBE72429C0B1B8B87DC8CC9 /* Build configuration list for PBXProject "ListenLater" */;
@@ -331,7 +474,7 @@
 			productRefGroup = 00C45FD35CB0F9C5F764F070 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (29C7B681C8D62CBAC94D51C0 /* ListenLater */, 1A6609CC8685B17F5F513A3B /* ListenLaterShare */, 7EC8F98B7A265120217712DE /* ListenLaterTests */, );
+			targets = (29C7B681C8D62CBAC94D51C0 /* ListenLater */, 1A6609CC8685B17F5F513A3B /* ListenLaterShare */, 7EC8F98B7A265120217712DE /* ListenLaterTests */, 23E6EB9256AB02C8FDCB22A5 /* ListenLaterMac */, D9F46B7C6688A2DFCFE4888A /* ListenLaterMacTests */, );
 		};
 /* End PBXProject section */
 
@@ -339,6 +482,8 @@
 		E28FAD8F60ECDED9B4AD087A /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (356A7E984C3F437F33DEEE59 /* Assets.xcassets in Resources */, ); runOnlyForDeploymentPostprocessing = 0; };
 		04ED5750613B4706A233CDE1 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		2BD6B9B82414E6AB1198F133 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		77D911E72F2E007FDAFB205A /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (BAD18BC9C1BA8352DF757475 /* Assets.xcassets in Resources */, ); runOnlyForDeploymentPostprocessing = 0; };
+		0AEAD9179DA6ACAAEF79384F /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -350,6 +495,7 @@
 				89BDF6E032D677D5D05C3539 /* AppModel.swift in Sources */,
 				C053BC3E053CB520A1481FB3 /* ListenLaterApp.swift in Sources */,
 				C5DEF96A9BFB22477940DA41 /* PersistenceController.swift in Sources */,
+				B880AB55BAEAB2BF1A42C1BB /* AudioSessionAdapter.swift in Sources */,
 				0EAA8AE44AB8E95DA11F920C /* PlaybackCoordinator.swift in Sources */,
 				F60F86D739726DA3FF19C53C /* PlaybackPreferences.swift in Sources */,
 				28645438419D7A6752312829 /* PodcastPlaybackEngine.swift in Sources */,
@@ -420,6 +566,81 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6328831100BFA1C9C3BE948D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				05170E64BCC66F8F739006DC /* ListenLaterMacApp.swift in Sources */,
+				795E125DE4106BDD6A738997 /* LocalMediaLibrary.swift in Sources */,
+				A4E08E1428C7C05FBF5BA740 /* LocalQueueStore.swift in Sources */,
+				F8F927D365F7428129419329 /* MacAddLinkView.swift in Sources */,
+				A9633B2AFBA6CA84B79F9A4E /* MacAppModel.swift in Sources */,
+				D4DD85FDE0A2AC5E01E9179C /* MacPlaybackCoordinator.swift in Sources */,
+				7DAEAB1362B82FF05FBF213F /* MacPlayerDetailView.swift in Sources */,
+				2CCE3C2BFBDD480EC04BE50B /* MacRootView.swift in Sources */,
+				5F9D7FF7A43DE2D1C40B1A6B /* MacSettingsView.swift in Sources */,
+				B0B1A79FE68AE887B8B1A07B /* Formatting.swift in Sources */,
+				D4286CE82FF2680F8A1B929C /* MediaSource.swift in Sources */,
+				836390A6825B396E556605A0 /* QueueItem.swift in Sources */,
+				674B2D462E8A73B396632A8F /* ApplePodcastsLink.swift in Sources */,
+				87CA122684693DA8BA960E9F /* ApplePodcastsLookupResolver.swift in Sources */,
+				E01FEE74AFE46E4EF159686B /* HTMLRSSDiscovery.swift in Sources */,
+				55FEC454A96C2AFE28DB8439 /* LinkClassifier.swift in Sources */,
+				5E97077D433D8C3874E48DF7 /* PodcastProviderAdapter.swift in Sources */,
+				3707C591CBA26C7778BC2A6C /* PodcastResolutionSupport.swift in Sources */,
+				16ED3D257269F1BEC4A11679 /* ProviderHTTPClient.swift in Sources */,
+				5D131FC795D163312E300F32 /* ProviderModels.swift in Sources */,
+				734200937DA22ADA3E5DF0D8 /* ProviderParsingSupport.swift in Sources */,
+				524EAD1034BAD37F3AB05BF8 /* ProviderRegistry.swift in Sources */,
+				63F02816CF268D246F1F6424 /* RSSFeedParser.swift in Sources */,
+				1945BD05B089EAD34B4CDBBB /* SocialVideoURLParser.swift in Sources */,
+				274D78A0ACC59499A49239A3 /* VideoGrabberProviderAdapter.swift in Sources */,
+				17395484E4B6E753AC0FD294 /* YouTubeProviderAdapter.swift in Sources */,
+				626BDC5713D1867F5C094245 /* YouTubeURLParser.swift in Sources */,
+				57DE89C38D4AFF0DDC8BAF22 /* SharedQueueInbox.swift in Sources */,
+				AA900D2EBAAAF934F2F1776A /* PersistenceController.swift in Sources */,
+				9EC22EE2864C9B69349EF2A3 /* QueueStore.swift in Sources */,
+				B992EEADD686C03A9F46F259 /* PodcastPlaybackEngine.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F9C0FE0D27D896CB89592C45 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1F27A3AAA1B3015C5DEC278D /* LocalMediaLibraryTests.swift in Sources */,
+				211D3139C210381DDD87B8F5 /* LocalQueueCompatibilityTests.swift in Sources */,
+				3F12A26BE83D75FBC29CEE79 /* MacAppModelReconciliationTests.swift in Sources */,
+				2817DB2880E3673C876A44E0 /* MacPlaybackCoordinatorTests.swift in Sources */,
+				EEBAB0A082B14B0A3AFE76B8 /* Formatting.swift in Sources */,
+				63DF70797F6E8472258EAD58 /* MediaSource.swift in Sources */,
+				617B5CD54A550A1292B30E99 /* QueueItem.swift in Sources */,
+				29B86C943627DDA6CDF24865 /* ApplePodcastsLink.swift in Sources */,
+				95F7B20AC7A1E90E63DAAC8B /* ApplePodcastsLookupResolver.swift in Sources */,
+				89CD891B76EEAD86FFAC8E73 /* HTMLRSSDiscovery.swift in Sources */,
+				C8C8712A84DE0DACD200B985 /* LinkClassifier.swift in Sources */,
+				5E56A22D13197CD4EA3234B6 /* PodcastProviderAdapter.swift in Sources */,
+				D46B24222519ADC7F491BA26 /* PodcastResolutionSupport.swift in Sources */,
+				D6FA7CEC29541D97B49404CA /* ProviderHTTPClient.swift in Sources */,
+				2759F7448089FF4ABECBAD88 /* ProviderModels.swift in Sources */,
+				4591EF3223B754A2D94500F2 /* ProviderParsingSupport.swift in Sources */,
+				F78475CF8211DA610980A689 /* ProviderRegistry.swift in Sources */,
+				89982E3882F222B10476565C /* RSSFeedParser.swift in Sources */,
+				8604774A90D3DE8B02CC3CB4 /* SocialVideoURLParser.swift in Sources */,
+				C173A997D64D31675440BB3F /* VideoGrabberProviderAdapter.swift in Sources */,
+				1FFF3A837DA46982C475867D /* YouTubeProviderAdapter.swift in Sources */,
+				9C27FF55F6AA806FCA1B8676 /* YouTubeURLParser.swift in Sources */,
+				6CD72291E81EFEDCC1041B7E /* SharedQueueInbox.swift in Sources */,
+				E6203702629AB1B3E7504CF7 /* PersistenceController.swift in Sources */,
+				A1C6571163C0D3A940186F3B /* QueueStore.swift in Sources */,
+				3D4A9AB64E6BC5ACDDF84205 /* PodcastPlaybackEngine.swift in Sources */,
+				DB3482D48B353CA957659A61 /* LocalMediaLibrary.swift in Sources */,
+				3B6D984E6488C46B405BE26F /* LocalQueueStore.swift in Sources */,
+				502B20A9ECBC4185F88330F1 /* MacAppModel.swift in Sources */,
+				A7F133080DBB84C9A746A446 /* MacPlaybackCoordinator.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -472,9 +693,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = "YES_AGGRESSIVE";
 				GCC_WARN_UNUSED_FUNCTION = "YES";
 				GCC_WARN_UNUSED_VARIABLE = "YES";
-				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = "YES";
-				SDKROOT = "iphoneos";
 				SWIFT_VERSION = "5.0";
 				DEBUG_INFORMATION_FORMAT = "dwarf";
 				ENABLE_TESTABILITY = "YES";
@@ -531,9 +750,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = "YES_AGGRESSIVE";
 				GCC_WARN_UNUSED_FUNCTION = "YES";
 				GCC_WARN_UNUSED_VARIABLE = "YES";
-				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
 				LOCALIZATION_PREFERS_STRING_CATALOGS = "YES";
-				SDKROOT = "iphoneos";
 				SWIFT_VERSION = "5.0";
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = "NO";
@@ -555,10 +772,12 @@
 				ENABLE_PREVIEWS = "YES";
 				GENERATE_INFOPLIST_FILE = "NO";
 				INFOPLIST_FILE = "ListenLater/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
 				MARKETING_VERSION = "1.0";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.kevinthau.ListenLater";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = "iphoneos";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = "YES";
 				SWIFT_STRICT_CONCURRENCY = "targeted";
@@ -578,10 +797,12 @@
 				ENABLE_PREVIEWS = "YES";
 				GENERATE_INFOPLIST_FILE = "NO";
 				INFOPLIST_FILE = "ListenLater/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
 				MARKETING_VERSION = "1.0";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.kevinthau.ListenLater";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = "iphoneos";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = "YES";
 				SWIFT_STRICT_CONCURRENCY = "targeted";
@@ -599,10 +820,12 @@
 				CURRENT_PROJECT_VERSION = "1";
 				GENERATE_INFOPLIST_FILE = "NO";
 				INFOPLIST_FILE = "ListenLaterShare/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../../Frameworks", );
 				MARKETING_VERSION = "1.0";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.kevinthau.ListenLater.AddToQueue";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = "iphoneos";
 				SKIP_INSTALL = "YES";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = "YES";
@@ -621,10 +844,12 @@
 				CURRENT_PROJECT_VERSION = "1";
 				GENERATE_INFOPLIST_FILE = "NO";
 				INFOPLIST_FILE = "ListenLaterShare/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../../Frameworks", );
 				MARKETING_VERSION = "1.0";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.kevinthau.ListenLater.AddToQueue";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = "iphoneos";
 				SKIP_INSTALL = "YES";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = "YES";
@@ -645,6 +870,7 @@
 				MARKETING_VERSION = "1.0";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.kevinthau.ListenLaterTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = "iphoneos";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_STRICT_CONCURRENCY = "targeted";
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -664,10 +890,99 @@
 				MARKETING_VERSION = "1.0";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.kevinthau.ListenLaterTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = "iphoneos";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_STRICT_CONCURRENCY = "targeted";
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ListenLater.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ListenLater";
+			};
+			name = Release;
+		};
+		ED4AD1CFB1E1C2321CC114C2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 50778595AA221B068518C8A3 /* Base.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "AccentColor";
+				CODE_SIGN_ENTITLEMENTS = "ListenLaterMac/ListenLaterMac.entitlements";
+				CODE_SIGN_STYLE = "Automatic";
+				COMBINE_HIDPI_IMAGES = "YES";
+				CURRENT_PROJECT_VERSION = "1";
+				ENABLE_APP_SANDBOX = "YES";
+				ENABLE_HARDENED_RUNTIME = "YES";
+				ENABLE_PREVIEWS = "YES";
+				GENERATE_INFOPLIST_FILE = "NO";
+				INFOPLIST_FILE = "ListenLaterMac/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", );
+				MACOSX_DEPLOYMENT_TARGET = "14.0";
+				MARKETING_VERSION = "1.0";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.kevinthau.ListenLaterMac";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = "macosx";
+				SUPPORTED_PLATFORMS = "macosx";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				SWIFT_STRICT_CONCURRENCY = "targeted";
+			};
+			name = Debug;
+		};
+		474802A97818766814CC82D0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 50778595AA221B068518C8A3 /* Base.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "AccentColor";
+				CODE_SIGN_ENTITLEMENTS = "ListenLaterMac/ListenLaterMac.entitlements";
+				CODE_SIGN_STYLE = "Automatic";
+				COMBINE_HIDPI_IMAGES = "YES";
+				CURRENT_PROJECT_VERSION = "1";
+				ENABLE_APP_SANDBOX = "YES";
+				ENABLE_HARDENED_RUNTIME = "YES";
+				ENABLE_PREVIEWS = "YES";
+				GENERATE_INFOPLIST_FILE = "NO";
+				INFOPLIST_FILE = "ListenLaterMac/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", );
+				MACOSX_DEPLOYMENT_TARGET = "14.0";
+				MARKETING_VERSION = "1.0";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.kevinthau.ListenLaterMac";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = "macosx";
+				SUPPORTED_PLATFORMS = "macosx";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				SWIFT_STRICT_CONCURRENCY = "targeted";
+			};
+			name = Release;
+		};
+		13E506AB6482FEBE7AFE438D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 50778595AA221B068518C8A3 /* Base.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_STYLE = "Automatic";
+				CURRENT_PROJECT_VERSION = "1";
+				GENERATE_INFOPLIST_FILE = "YES";
+				MACOSX_DEPLOYMENT_TARGET = "14.0";
+				MARKETING_VERSION = "1.0";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.kevinthau.ListenLaterMacTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = "macosx";
+				SUPPORTED_PLATFORMS = "macosx";
+				SWIFT_STRICT_CONCURRENCY = "targeted";
+			};
+			name = Debug;
+		};
+		BBAC5C0EB4AF898C58C53C02 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 50778595AA221B068518C8A3 /* Base.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_STYLE = "Automatic";
+				CURRENT_PROJECT_VERSION = "1";
+				GENERATE_INFOPLIST_FILE = "YES";
+				MACOSX_DEPLOYMENT_TARGET = "14.0";
+				MARKETING_VERSION = "1.0";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.kevinthau.ListenLaterMacTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = "macosx";
+				SUPPORTED_PLATFORMS = "macosx";
+				SWIFT_STRICT_CONCURRENCY = "targeted";
 			};
 			name = Release;
 		};
@@ -678,6 +993,8 @@
 		6999223B144664B5601B7EE0 /* Build configuration list for PBXNativeTarget "ListenLater" */ = {isa = XCConfigurationList; buildConfigurations = (CC982C4F58FE5F6D2B2680C2 /* Debug */, 06B6A15813AE62FDCFE74422 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		B95C4BC769F6EB7237567CD5 /* Build configuration list for PBXNativeTarget "ListenLaterShare" */ = {isa = XCConfigurationList; buildConfigurations = (AD68F319690A58A9A96E93C3 /* Debug */, D56DD4D9C1B7C7C2A93DF5D0 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		896302F3B0CBBDA7B3457F1A /* Build configuration list for PBXNativeTarget "ListenLaterTests" */ = {isa = XCConfigurationList; buildConfigurations = (0FDEFC4302813C22AF141CA7 /* Debug */, 779A6DE1C6EB04ECC0A3779E /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		E97E1AC380FB80620FB311E9 /* Build configuration list for PBXNativeTarget "ListenLaterMac" */ = {isa = XCConfigurationList; buildConfigurations = (ED4AD1CFB1E1C2321CC114C2 /* Debug */, 474802A97818766814CC82D0 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		990E0853C6BE8C34BFAE85BA /* Build configuration list for PBXNativeTarget "ListenLaterMacTests" */ = {isa = XCConfigurationList; buildConfigurations = (13E506AB6482FEBE7AFE438D /* Debug */, BBAC5C0EB4AF898C58C53C02 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 	};
 	rootObject = 98F54143AB4E86B28C3AFEE0 /* Project object */;
