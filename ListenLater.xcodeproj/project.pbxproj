@@ -98,6 +98,7 @@
 		B992EEADD686C03A9F46F259 /* PodcastPlaybackEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7624932610E8ABD5A68807C4 /* PodcastPlaybackEngine.swift */; };
 		1F27A3AAA1B3015C5DEC278D /* LocalMediaLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6949582589B6C485DC16DA8F /* LocalMediaLibraryTests.swift */; };
 		211D3139C210381DDD87B8F5 /* LocalQueueCompatibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2686CB50B69469CDA369A4B /* LocalQueueCompatibilityTests.swift */; };
+		3F12A26BE83D75FBC29CEE79 /* MacAppModelReconciliationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6FD36EF5F0608D597F8EBB0 /* MacAppModelReconciliationTests.swift */; };
 		2817DB2880E3673C876A44E0 /* MacPlaybackCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FFF420F59194A529AE37EB8 /* MacPlaybackCoordinatorTests.swift */; };
 		EEBAB0A082B14B0A3AFE76B8 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED5496097121F87974A51F4A /* Formatting.swift */; };
 		63DF70797F6E8472258EAD58 /* MediaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE354E16BE118D90E05EBA13 /* MediaSource.swift */; };
@@ -123,6 +124,7 @@
 		3D4A9AB64E6BC5ACDDF84205 /* PodcastPlaybackEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7624932610E8ABD5A68807C4 /* PodcastPlaybackEngine.swift */; };
 		DB3482D48B353CA957659A61 /* LocalMediaLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F852766F4BBE32C3AD4D2A6 /* LocalMediaLibrary.swift */; };
 		3B6D984E6488C46B405BE26F /* LocalQueueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5173238320496D3EB0895995 /* LocalQueueStore.swift */; };
+		502B20A9ECBC4185F88330F1 /* MacAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6F19C9E101FB04606832E63 /* MacAppModel.swift */; };
 		A7F133080DBB84C9A746A446 /* MacPlaybackCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6601561A20BD59C0A84CE10E /* MacPlaybackCoordinator.swift */; };
 		356A7E984C3F437F33DEEE59 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C0ECD60F619A829BDEFDF42D /* Assets.xcassets */; };
 		BAD18BC9C1BA8352DF757475 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 81F519774CE50204BA4EA1FE /* Assets.xcassets */; };
@@ -218,6 +220,7 @@
 		DE53EBC45E7D4C2784553A70 /* ListenLaterMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "ListenLaterMac.entitlements"; sourceTree = "<group>"; };
 		6949582589B6C485DC16DA8F /* LocalMediaLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocalMediaLibraryTests.swift"; sourceTree = "<group>"; };
 		F2686CB50B69469CDA369A4B /* LocalQueueCompatibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocalQueueCompatibilityTests.swift"; sourceTree = "<group>"; };
+		D6FD36EF5F0608D597F8EBB0 /* MacAppModelReconciliationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MacAppModelReconciliationTests.swift"; sourceTree = "<group>"; };
 		8FFF420F59194A529AE37EB8 /* MacPlaybackCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MacPlaybackCoordinatorTests.swift"; sourceTree = "<group>"; };
 		50778595AA221B068518C8A3 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Base.xcconfig"; sourceTree = "<group>"; };
 		B634E8A392A66625328866F0 /* Secrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Secrets.xcconfig.example"; sourceTree = "<group>"; };
@@ -360,6 +363,7 @@
 			children = (
 				6949582589B6C485DC16DA8F /* LocalMediaLibraryTests.swift */,
 				F2686CB50B69469CDA369A4B /* LocalQueueCompatibilityTests.swift */,
+				D6FD36EF5F0608D597F8EBB0 /* MacAppModelReconciliationTests.swift */,
 				8FFF420F59194A529AE37EB8 /* MacPlaybackCoordinatorTests.swift */,
 			);
 			path = ListenLaterMacTests;
@@ -606,6 +610,7 @@
 			files = (
 				1F27A3AAA1B3015C5DEC278D /* LocalMediaLibraryTests.swift in Sources */,
 				211D3139C210381DDD87B8F5 /* LocalQueueCompatibilityTests.swift in Sources */,
+				3F12A26BE83D75FBC29CEE79 /* MacAppModelReconciliationTests.swift in Sources */,
 				2817DB2880E3673C876A44E0 /* MacPlaybackCoordinatorTests.swift in Sources */,
 				EEBAB0A082B14B0A3AFE76B8 /* Formatting.swift in Sources */,
 				63DF70797F6E8472258EAD58 /* MediaSource.swift in Sources */,
@@ -631,6 +636,7 @@
 				3D4A9AB64E6BC5ACDDF84205 /* PodcastPlaybackEngine.swift in Sources */,
 				DB3482D48B353CA957659A61 /* LocalMediaLibrary.swift in Sources */,
 				3B6D984E6488C46B405BE26F /* LocalQueueStore.swift in Sources */,
+				502B20A9ECBC4185F88330F1 /* MacAppModel.swift in Sources */,
 				A7F133080DBB84C9A746A446 /* MacPlaybackCoordinator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

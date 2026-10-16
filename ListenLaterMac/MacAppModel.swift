@@ -155,7 +155,6 @@ final class MacAppModel {
     func importVideos(from urls: [URL]) async {
         guard !urls.isEmpty, !isImporting else { return }
         isImporting = true
-        defer { isImporting = false }
         var importedCount = 0
         var failures: [String] = []
 
@@ -196,6 +195,11 @@ final class MacAppModel {
             let prefix = importedCount > 0 ? "Imported \(importedCount). " : ""
             userMessage = prefix + failures.joined(separator: "\n")
         }
+        isImporting = false
+        // A refresh that arrives while files are being copied deliberately
+        // skips reconciliation. Run it once metadata for every committed
+        // import is durable so no newly imported directory can look orphaned.
+        await reconcileLocalMedia()
     }
 
     func delete(_ item: QueueItem) async {
@@ -299,6 +303,7 @@ final class MacAppModel {
     }
 
     private func reconcileLocalMedia() async {
+        guard !isImporting else { return }
         let referenced = Set(localQueue.items.compactMap(\.localMediaID))
         do {
             try await localMediaLibrary.reconcile(referencedMediaIDs: referenced)

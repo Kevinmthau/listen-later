@@ -47,6 +47,7 @@ mac_shared_sources = core_sources + [
 mac_test_support_sources = mac_shared_sources + [
   "ListenLaterMac/LocalMediaLibrary.swift",
   "ListenLaterMac/LocalQueueStore.swift",
+  "ListenLaterMac/MacAppModel.swift",
   "ListenLaterMac/MacPlaybackCoordinator.swift"
 ]
 
