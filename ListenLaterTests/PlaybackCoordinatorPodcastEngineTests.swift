@@ -707,7 +707,7 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
     }
 
     func testBackgroundAdvancePlaysVideosWithContinuousPlay() throws {
-        let harness = try makeHarness(clipsPlayContinuously: true)
+        let harness = try makeHarness(clipsPlayContinuously: { true })
         let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
         let video = appendSocialVideo(to: harness.queue, ordinal: 2)
         let second = appendPodcast(to: harness.queue, ordinal: 3, duration: 600)
@@ -722,7 +722,7 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
     }
 
     func testClipsPlayOneAfterAnotherInTheBackgroundWithContinuousPlay() throws {
-        let harness = try makeHarness(clipsPlayContinuously: true)
+        let harness = try makeHarness(clipsPlayContinuously: { true })
         let first = appendSocialVideo(to: harness.queue, ordinal: 1)
         let second = appendSocialVideo(to: harness.queue, ordinal: 2)
         harness.coordinator.start(first)
@@ -736,6 +736,67 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         XCTAssertEqual(harness.engine.loads.last?.url, second.playbackURL)
         XCTAssertEqual(harness.engine.playCallCount, 2)
         XCTAssertNil(harness.coordinator.notice)
+    }
+
+    func testContinuousPlayLetsAPlayingClipCarryOnInTheBackground() throws {
+        let harness = try makeHarness(clipsPlayContinuously: { true })
+        let video = appendSocialVideo(to: harness.queue, ordinal: 1)
+
+        harness.coordinator.start(video)
+
+        XCTAssertTrue(
+            harness.engine.continuesVideoInBackground,
+            "Locking the phone mustn't pause the clip."
+        )
+    }
+
+    func testLeavingTheScreenAppliesAContinuousPlayChangeMadeDuringAClip() throws {
+        var clipsPlayContinuously = false
+        let harness = try makeHarness(clipsPlayContinuously: { clipsPlayContinuously })
+        let video = appendSocialVideo(to: harness.queue, ordinal: 1)
+        harness.coordinator.start(video)
+        XCTAssertFalse(
+            harness.engine.continuesVideoInBackground,
+            "With continuous play off, the system pauses a clip nobody can see."
+        )
+
+        // Turned on in Settings while the clip plays.
+        clipsPlayContinuously = true
+        harness.coordinator.sceneWillResignActive()
+
+        XCTAssertTrue(harness.engine.continuesVideoInBackground)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+    }
+
+    func testContinuousPlayPlaysOnPastYouTubeInTheBackground() throws {
+        let harness = try makeHarness(clipsPlayContinuously: { true })
+        let first = appendSocialVideo(to: harness.queue, ordinal: 1)
+        let youtube = appendYouTube(to: harness.queue, ordinal: 2)
+        let second = appendSocialVideo(to: harness.queue, ordinal: 3)
+        harness.coordinator.start(first)
+        harness.coordinator.sceneWillResignActive()
+
+        harness.engine.emit(.ended)
+
+        XCTAssertEqual(harness.coordinator.currentItemID, second.id)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+        XCTAssertEqual(harness.engine.loads.last?.url, second.playbackURL)
+        XCTAssertEqual(
+            harness.queue.items.filter { !$0.isInPlayedSection }.map(\.id),
+            [second.id, youtube.id],
+            "The YouTube video waits in Up Next for the screen."
+        )
+
+        // With only YouTube left, the queue waits for the screen.
+        harness.engine.emit(.ended)
+
+        XCTAssertEqual(harness.coordinator.currentItemID, youtube.id)
+        XCTAssertEqual(harness.coordinator.transportState, .waitingForForeground)
+        XCTAssertNil(
+            harness.youtubePlayer.videoID,
+            "The embedded YouTube player must not be loaded for background playback."
+        )
+        XCTAssertFalse(youtube.isPlayed)
     }
 
     func testEndOfItemSleepTimerInTheBackgroundKeepsQueueOrder() throws {
@@ -1235,6 +1296,21 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         engine.tearDown()
     }
 
+    func testContinuingVideoInTheBackgroundSetsThePlayersPolicy() throws {
+        let engine = AVPlayerPodcastEngine()
+        let player = try XCTUnwrap(engine.renderingPlayer)
+
+        engine.continuesVideoInBackground = true
+        XCTAssertEqual(player.audiovisualBackgroundPlaybackPolicy, .continuesIfPossible)
+        XCTAssertTrue(engine.continuesVideoInBackground)
+
+        // Off, the system decides, and pauses a video showing in the app.
+        engine.continuesVideoInBackground = false
+        XCTAssertEqual(player.audiovisualBackgroundPlaybackPolicy, .automatic)
+        XCTAssertFalse(engine.continuesVideoInBackground)
+        engine.tearDown()
+    }
+
     func testPodcastWatchdogFailsAPlaybackThatNeverStarts() async {
         let failure = expectation(description: "Playback watchdog failure")
         let engine = AVPlayerPodcastEngine(playbackWatchdogDelay: {})
@@ -1302,7 +1378,7 @@ private extension PlaybackCoordinatorPodcastEngineTests {
         sleepTimerDelay: @escaping @Sendable (TimeInterval) async throws -> Void = {
             try await Task.sleep(for: .seconds($0))
         },
-        clipsPlayContinuously: Bool = false,
+        clipsPlayContinuously: @escaping () -> Bool = { false },
         providers: [any MediaProvider] = []
     ) throws -> Harness {
         let persistence = try PersistenceController.makeContainer(inMemory: true)
@@ -1317,7 +1393,7 @@ private extension PlaybackCoordinatorPodcastEngineTests {
             podcastEngine: engine,
             youtubePlayer: youtubePlayer,
             sleepTimerDelay: sleepTimerDelay,
-            clipsPlayContinuously: { clipsPlayContinuously }
+            clipsPlayContinuously: clipsPlayContinuously
         )
         return Harness(
             container: persistence.container,
@@ -1453,6 +1529,7 @@ private final class FakePodcastPlaybackEngine: PodcastPlaybackEngine {
 
     var eventHandler: ((UUID, PodcastPlaybackEvent) -> Void)?
     private(set) var isPlaying = false
+    var continuesVideoInBackground = false
     private(set) var loads: [Load] = []
     private(set) var playCallCount = 0
     private(set) var pauseCallCount = 0

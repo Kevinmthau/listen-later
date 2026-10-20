@@ -9,10 +9,11 @@ enum PlaybackPreferences {
     static let legacyVideosWaitForScreenKey = "videosWaitForScreen"
 
     /// While MushRadio is in the background (screen locked or another app
-    /// open), automatic advances play X and Instagram clips too, as audio,
-    /// one after another like podcasts. Off, those advances play only audio
-    /// and leave clips in Up Next for when the user can watch them. On
-    /// unless the user turns it off.
+    /// open), a playing clip carries on as audio, and automatic advances
+    /// play X and Instagram clips too, one after another like podcasts.
+    /// Off, the system pauses a clip nobody can see, and those advances
+    /// play only audio and leave clips in Up Next for when the user can
+    /// watch them. On unless the user turns it off.
     static func clipsPlayContinuously(in defaults: UserDefaults = .standard) -> Bool {
         defaults.object(forKey: clipsPlayContinuouslyKey) as? Bool ?? true
     }

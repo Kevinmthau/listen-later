@@ -21,6 +21,10 @@ protocol PodcastPlaybackEngine: AnyObject {
     var eventHandler: ((UUID, PodcastPlaybackEvent) -> Void)? { get set }
     var isPlaying: Bool { get }
     var renderingPlayer: AVPlayer? { get }
+    /// Whether a video keeps playing, as audio, while the app is in the
+    /// background or the device is locked. Otherwise the system pauses a
+    /// video showing in the app, unless Picture in Picture takes it over.
+    var continuesVideoInBackground: Bool { get set }
 
     func load(
         url: URL,
@@ -62,6 +66,16 @@ final class AVPlayerPodcastEngine: PodcastPlaybackEngine {
 
     var renderingPlayer: AVPlayer? {
         player
+    }
+
+    var continuesVideoInBackground: Bool {
+        get {
+            player.audiovisualBackgroundPlaybackPolicy == .continuesIfPossible
+        }
+        set {
+            player.audiovisualBackgroundPlaybackPolicy =
+                newValue ? .continuesIfPossible : .automatic
+        }
     }
 
     init(
