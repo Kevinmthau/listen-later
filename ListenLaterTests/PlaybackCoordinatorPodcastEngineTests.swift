@@ -755,10 +755,6 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
         let harness = try makeHarness(clipsPlayContinuously: { clipsPlayContinuously })
         let video = appendSocialVideo(to: harness.queue, ordinal: 1)
         harness.coordinator.start(video)
-        XCTAssertFalse(
-            harness.engine.continuesVideoInBackground,
-            "With continuous play off, the system pauses a clip nobody can see."
-        )
 
         // Turned on in Settings while the clip plays.
         clipsPlayContinuously = true
@@ -766,6 +762,31 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
 
         XCTAssertTrue(harness.engine.continuesVideoInBackground)
         XCTAssertEqual(harness.coordinator.transportState, .playing)
+
+        // And off again, back on screen.
+        harness.coordinator.sceneDidBecomeActive()
+        clipsPlayContinuously = false
+        harness.coordinator.sceneWillResignActive()
+
+        XCTAssertFalse(
+            harness.engine.continuesVideoInBackground,
+            "With continuous play off, the system pauses a clip nobody can see."
+        )
+    }
+
+    func testResumingAClipAppliesAContinuousPlayChangeMadeWhilePaused() throws {
+        var clipsPlayContinuously = false
+        let harness = try makeHarness(clipsPlayContinuously: { clipsPlayContinuously })
+        let video = appendSocialVideo(to: harness.queue, ordinal: 1)
+        harness.coordinator.start(video)
+        harness.coordinator.pause()
+
+        clipsPlayContinuously = true
+        harness.coordinator.play()
+
+        XCTAssertEqual(harness.engine.loads.count, 1, "The clip resumes rather than reloading.")
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+        XCTAssertTrue(harness.engine.continuesVideoInBackground)
     }
 
     func testContinuousPlayPlaysOnPastYouTubeInTheBackground() throws {
@@ -797,6 +818,54 @@ final class PlaybackCoordinatorPodcastEngineTests: XCTestCase {
             "The embedded YouTube player must not be loaded for background playback."
         )
         XCTAssertFalse(youtube.isPlayed)
+    }
+
+    func testBackgroundPodcastPlaysOnPastYouTubeWithContinuousPlay() throws {
+        let harness = try makeHarness(clipsPlayContinuously: { true })
+        let first = appendPodcast(to: harness.queue, ordinal: 1, duration: 300)
+        let youtube = appendYouTube(to: harness.queue, ordinal: 2)
+        let second = appendPodcast(to: harness.queue, ordinal: 3, duration: 600)
+        harness.coordinator.start(first)
+        harness.coordinator.sceneWillResignActive()
+
+        harness.engine.emit(.ended)
+
+        XCTAssertEqual(harness.coordinator.currentItemID, second.id)
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+        XCTAssertEqual(
+            harness.queue.items.filter { !$0.isInPlayedSection }.map(\.id),
+            [second.id, youtube.id]
+        )
+        XCTAssertFalse(youtube.isPlayed)
+    }
+
+    func testYouTubeWaitsForTheScreenWhileAClipShowsInPictureInPicture() throws {
+        let harness = try makeHarness()
+        let first = appendSocialVideo(to: harness.queue, ordinal: 1)
+        let youtube = appendYouTube(to: harness.queue, ordinal: 2)
+        let second = appendSocialVideo(to: harness.queue, ordinal: 3)
+        harness.coordinator.start(first)
+        harness.coordinator.sceneWillResignActive()
+        NotificationCenter.default.post(name: .pictureInPictureDidStart, object: nil)
+        defer {
+            NotificationCenter.default.post(name: .pictureInPictureDidStop, object: nil)
+        }
+        // The observer hops to the main actor; let it run.
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+
+        harness.engine.emit(.ended)
+
+        XCTAssertEqual(
+            harness.coordinator.currentItemID,
+            second.id,
+            "Picture in Picture can show the next clip, but not a YouTube video."
+        )
+        XCTAssertEqual(harness.coordinator.transportState, .playing)
+        XCTAssertEqual(
+            harness.queue.items.filter { !$0.isInPlayedSection }.map(\.id),
+            [second.id, youtube.id]
+        )
+        XCTAssertNil(harness.youtubePlayer.videoID)
     }
 
     func testEndOfItemSleepTimerInTheBackgroundKeepsQueueOrder() throws {

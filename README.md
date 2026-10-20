@@ -557,8 +557,8 @@ xcodebuild \
   test
 ```
 
-The 177-test automated suite is deterministic and does not require a live API
-key or network access: 157 iOS tests plus 20 Mac-specific tests.
+The 180-test automated suite is deterministic and does not require a live API
+key or network access: 160 iOS tests plus 20 Mac-specific tests.
 
 - `ProviderParsingTests` covers supported and hostile YouTube and social-video
   URL forms, video-grabber request/response behavior, expiration handling,
@@ -665,6 +665,9 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
   ends. Repeat by leaving the app with Picture in Picture turned off in iOS
   Settings, and by locking the device while the clip shows in Picture in
   Picture.
+- [ ] With it on, leave the app while an X video plays in Picture in
+  Picture, then close the Picture in Picture window; verify the clip pauses
+  rather than playing on unseen.
 - [ ] With it on, put a YouTube video between two X videos and lock the
   device during the first; verify the second X video plays next and the
   YouTube video stays in Up Next.
