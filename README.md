@@ -104,12 +104,16 @@ MushRadio therefore behaves as follows:
   YouTube playback. The app clears Now Playing information and disables
   lock-screen/Bluetooth remote commands for YouTube.
 - While the device is locked or the app is in the background, X and
-  Instagram clips keep playing one after another as audio and are marked
-  played when they end (the default **Continuous Play for Clips** setting).
-  With it off, a podcast that finishes while locked skips over videos to the
-  next podcast and leaves the videos in Up Next; when only videos remain, the
-  queue waits for the app to return to the foreground. YouTube videos always
-  wait for the screen.
+  Instagram clips keep playing as audio (the default **Continuous Play for
+  Clips** setting): a clip playing when you lock the device or leave the app
+  carries on, the clips after it play one after another, and each is marked
+  played when it ends. With it off, the system pauses a clip nobody can see,
+  and a podcast that finishes while locked skips over videos to the next
+  podcast and leaves the videos in Up Next; when only videos remain, the
+  queue waits for the app to return to the foreground.
+- YouTube videos always wait for the screen. In the background the queue
+  plays on past them and leaves them in Up Next; it waits for the app to
+  return to the foreground only when nothing else can play.
 - Foreground auto-advance is attempted only while the player is visible.
   WebKit/YouTube may still block autoplay; the app then asks the user to tap
   Play.
@@ -129,10 +133,11 @@ MushRadio therefore behaves as follows:
   from Data API duration. Playback completion comes from the official player’s
   terminal event.
 
-The combined queue remains useful and ordered, but a fully continuous
-background queue across a YouTube boundary is not possible under the current
-YouTube rules. This is the closest seamless behavior that preserves the
-official audiovisual player and its playback context.
+The combined queue remains useful and ordered, but YouTube videos can't join a
+continuous background queue under the current YouTube rules, so the queue plays
+on past them and leaves them for the screen. This is the closest seamless
+behavior that preserves the official audiovisual player and its playback
+context.
 
 Relevant official references:
 
@@ -476,18 +481,21 @@ interruptions, pauses when an old output route becomes unavailable, and marks
 an item unavailable after a 30-second startup/rebuffer watchdog expires so the
 queue can continue. AirPlay and Bluetooth A2DP are enabled.
 
-Native X/Instagram playback uses the same engine and can keep audio active when
-the app backgrounds. The inline video is sized to the video's own shape (a
-vertical reel is tall and narrow), has a full-screen button that opens the
-system player (which may rotate to landscape and offers Picture in Picture and
-AirPlay), and continues in Picture in Picture when you leave the app while it
-plays. By
-default, **Continuous Play for Clips** is on: automatic advances made in the
-background play X and Instagram clips as audio, one after another, and mark
-them played when they end. Turning it off in Settings saves clips for the
-screen instead: the queue plays the next podcast and leaves videos in Up Next,
-and a video that is reached with no audio left is loaded but paused. Rows for
-videos that will wait show **Needs screen**.
+Native X/Instagram playback uses the same engine. The inline video is sized to
+the video's own shape (a vertical reel is tall and narrow), has a full-screen
+button that opens the system player (which may rotate to landscape and offers
+Picture in Picture and AirPlay), and continues in Picture in Picture when you
+leave the app while it plays. By default, **Continuous Play for Clips** is on:
+a clip keeps playing as audio when you lock the device or leave the app without
+Picture in Picture, and automatic advances made in the background play X and
+Instagram clips as audio, one after another, and mark them played when they
+end. For this the engine sets the player's
+`audiovisualBackgroundPlaybackPolicy` to `.continuesIfPossible`; otherwise iOS
+pauses a player whose video is showing in the app as soon as the app leaves the
+screen. Turning the setting off saves clips for the screen instead: the system
+pauses a clip nobody can see, the queue plays the next podcast and leaves
+videos in Up Next, and a video that is reached with no audio left is loaded but
+paused. Rows for videos that will wait show **Needs screen**.
 Do not enable or simulate background YouTube playback. See Apple’s
 [AVAudioSession guidance](https://developer.apple.com/documentation/avfaudio/avaudiosession)
 and [background execution modes](https://developer.apple.com/documentation/xcode/configuring-background-execution-modes).
@@ -549,8 +557,8 @@ xcodebuild \
   test
 ```
 
-The 168-test automated suite is deterministic and does not require a live API
-key or network access: 153 existing iOS tests plus 15 Mac-specific tests.
+The 180-test automated suite is deterministic and does not require a live API
+key or network access: 160 iOS tests plus 20 Mac-specific tests.
 
 - `ProviderParsingTests` covers supported and hostile YouTube and social-video
   URL forms, video-grabber request/response behavior, expiration handling,
@@ -566,8 +574,9 @@ key or network access: 153 existing iOS tests plus 15 Mac-specific tests.
   YouTube completion boundaries, expiring social-video URLs, and refreshes from
   another model context.
 - `PlaybackCoordinatorPodcastEngineTests` uses a fake podcast engine for resume,
-  native social-video playback, completion, failure/skip, seeking, rate, and
-  the foreground-only YouTube boundary.
+  native social-video playback, completion, failure/skip, seeking, rate,
+  continuous clip play in the background, and the foreground-only YouTube
+  boundary.
 - `SharedQueueInboxTests` verifies chronological atomic-file handoff and retry
   behavior, cross-process notifications, receipt-idempotent relaunch recovery,
   multi-receipt staging, and malformed-file quarantine.
@@ -649,6 +658,22 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
 - [ ] Make an enclosure fail during playback and confirm unavailable marking
   and skip-to-next behavior.
 
+### Clip playback
+
+- [ ] With **Continuous Play for Clips** on, start an X video, lock the
+  device, and verify its audio carries on and the next clip starts when it
+  ends. Repeat by leaving the app with Picture in Picture turned off in iOS
+  Settings, and by locking the device while the clip shows in Picture in
+  Picture.
+- [ ] With it on, leave the app while an X video plays in Picture in
+  Picture, then close the Picture in Picture window; verify the clip pauses
+  rather than playing on unseen.
+- [ ] With it on, put a YouTube video between two X videos and lock the
+  device during the first; verify the second X video plays next and the
+  YouTube video stays in Up Next.
+- [ ] With it off, lock the device while an X video plays and verify it
+  pauses where it was rather than finishing unseen.
+
 ### YouTube playback
 
 - [ ] Without a Data API key, confirm a shared video becomes ready with oEmbed
@@ -664,10 +689,11 @@ lock-screen, and Bluetooth behavior belong in the real-device checklist below.
   videos are marked unavailable and skipped.
 - [ ] Verify made-for-kids items offer **Open in YouTube**.
 - [ ] Finish a foreground YouTube item and verify foreground queue advance.
-- [ ] Finish a background podcast immediately before a YouTube or X video with
-  another podcast after it; verify the second podcast plays and the video
-  stays in Up Next. With no podcast left, verify the app waits for the
-  foreground rather than playing the video invisibly.
+- [ ] With **Continuous Play for Clips** off, finish a background podcast
+  immediately before a YouTube or X video with another podcast after it;
+  verify the second podcast plays and the video stays in Up Next. With no
+  podcast left, verify the app waits for the foreground rather than playing
+  the video invisibly.
 
 ### Queue and sync
 
@@ -766,8 +792,9 @@ privacy policy or legal terms.
 ## Known MVP limitations
 
 - YouTube cannot play in the background, from the lock screen, as audio-only
-  media, or while its official player is hidden. A YouTube boundary can pause
-  the otherwise continuous queue.
+  media, or while its official player is hidden. In the background the queue
+  plays on past YouTube videos, leaving them in Up Next, and stops at one only
+  when nothing else can play.
 - WebKit or YouTube can require a fresh user gesture even when foreground
   autoplay is requested.
 - Private, age-restricted, region-restricted, live-state-restricted, removed, or

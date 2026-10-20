@@ -268,6 +268,7 @@ final class PlaybackCoordinator {
             // clear it first, so a problem activating audio still shows.
             notice = nil
             activateAudioSession()
+            applyClipBackgroundPolicy()
             podcastEngine.play()
             isBuffering = !podcastEngine.isPlaying
             if item.source.isVideo {
@@ -551,6 +552,7 @@ final class PlaybackCoordinator {
     func sceneWillResignActive() {
         isForeground = false
         saveCurrentProgress(force: true)
+        applyClipBackgroundPolicy()
         guard currentItem?.source == .youtube else { return }
         activeYouTubeLoadID = nil
         preparedItemID = nil
@@ -682,6 +684,7 @@ final class PlaybackCoordinator {
         }
         youtubePlayer.pause()
         activateAudioSession()
+        applyClipBackgroundPolicy()
         let loadID = UUID()
         activePodcastLoadID = loadID
         podcastEngine.load(
@@ -692,10 +695,9 @@ final class PlaybackCoordinator {
         )
         preparedItemID = item.id
         setRemoteCommandsEnabled(true)
-        // Nobody can see a video that starts on its own in the background,
-        // so leave it ready instead of playing its audio unseen.
-        let videoMustWait = item.source.isVideo && videosMustWait
-        if autoplay, !videoMustWait {
+        // Unless clips play continuously, a video nobody can see is left
+        // ready instead of playing its audio unseen.
+        if autoplay, !mustWaitForScreen(item) {
             podcastEngine.play()
             isBuffering = !podcastEngine.isPlaying
             if item.source.isVideo {
@@ -1005,24 +1007,31 @@ final class PlaybackCoordinator {
         nextItem(excluding: item.id)
     }
 
-    /// The first playable item other than `excludedID`. In the background,
-    /// with continuous play for clips off, audio further down Up Next comes
-    /// first; a video is only chosen when no audio is left, and then it
-    /// waits rather than playing.
+    /// The first playable item other than `excludedID`. Off screen, items
+    /// that must wait for it give way to the first one further down Up Next
+    /// that can play now; one of them is chosen only when nothing else can
+    /// play, and then it waits rather than playing.
     private func nextItem(excluding excludedID: UUID?) -> QueueItem? {
-        if videosMustWait,
-           let audio = queue.firstUnplayed(excluding: excludedID, where: { !$0.source.isVideo })
-        {
-            return audio
-        }
-        return queue.firstUnplayed(excluding: excludedID)
+        queue.firstUnplayed(excluding: excludedID, where: { !mustWaitForScreen($0) })
+            ?? queue.firstUnplayed(excluding: excludedID)
     }
 
-    /// Nobody can see a video: the app isn't on screen and no Picture in
-    /// Picture window is showing one, and the user has turned off continuous
-    /// play for clips.
-    private var videosMustWait: Bool {
-        !isForeground && !isPictureInPictureActive && !clipsPlayContinuously()
+    /// Whether `item` can't play until MushRadio is back on screen. A
+    /// YouTube video needs its visible player. Any other video needs to be
+    /// seen, if only in Picture in Picture, unless the user lets clips play
+    /// continuously.
+    private func mustWaitForScreen(_ item: QueueItem) -> Bool {
+        guard !isForeground, item.source.isVideo else { return false }
+        return item.source == .youtube
+            || (!isPictureInPictureActive && !clipsPlayContinuously())
+    }
+
+    /// With continuous play for clips, a clip playing when MushRadio leaves
+    /// the screen carries on as audio rather than being paused by the
+    /// system. Applied before native media plays, and again as the app
+    /// leaves the screen in case the setting changed meanwhile.
+    private func applyClipBackgroundPolicy() {
+        podcastEngine.continuesVideoInBackground = clipsPlayContinuously()
     }
 
     private func finishQueue(notice finalNotice: String = "Queue finished.") {

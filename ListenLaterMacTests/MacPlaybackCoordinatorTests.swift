@@ -527,6 +527,7 @@ private final class MacTestPlaybackEngine: PodcastPlaybackEngine {
     private(set) var rateCalls: [Float] = []
     private let player = AVPlayer()
     var renderingPlayer: AVPlayer? { player }
+    var continuesVideoInBackground = false
     private var loadID: UUID?
 
     func load(url: URL, position: TimeInterval, rate: Float, loadID: UUID) {
