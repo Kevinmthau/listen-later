@@ -1,8 +1,10 @@
+import AppKit
 import SwiftData
 import SwiftUI
 
 @main
 struct ListenLaterMacApp: App {
+    @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
     @State private var model: MacAppModel
 
@@ -96,5 +98,18 @@ struct ListenLaterMacApp: App {
 
     private var modelLocalMediaDescription: String {
         "Application Support/MushRadio/LocalMedia"
+    }
+}
+
+private final class MacAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let processInfo = ProcessInfo.processInfo
+        let usesInMemoryStore = processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || processInfo.arguments.contains("-DemoQueue")
+            || processInfo.arguments.contains("-InMemoryStore")
+        guard !usesInMemoryStore else { return }
+
+        // CloudKit imports use silent notifications; no alert permission is needed.
+        NSApplication.shared.registerForRemoteNotifications()
     }
 }

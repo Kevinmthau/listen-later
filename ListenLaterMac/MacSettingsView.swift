@@ -11,6 +11,11 @@ struct MacSettingsView: View {
                 LabeledContent("Linked items") {
                     Text(isCloudBacked ? "Private iCloud queue" : "Local fallback")
                 }
+                Text(isCloudBacked
+                    ? "Links added here sync with MushRadio on your iPhone and iPad using the same iCloud account. Sync may take a moment."
+                    : "Links are saved on this Mac. Relaunch after fixing the iCloud setup to resume sync.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 if let persistenceNotice {
                     Text(persistenceNotice)
                         .font(.caption)

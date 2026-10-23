@@ -45,6 +45,7 @@ mac_shared_sources = core_sources + [
   "ListenLater/Playback/PodcastPlaybackEngine.swift"
 ]
 mac_test_support_sources = mac_shared_sources + [
+  "ListenLaterTests/PersistenceControllerTests.swift",
   "ListenLaterMac/LocalMediaLibrary.swift",
   "ListenLaterMac/LocalQueueStore.swift",
   "ListenLaterMac/MacAppModel.swift",
@@ -366,10 +367,10 @@ objects.concat([
   "\t\t\t\tLastSwiftUpdateCheck = 2660;",
   "\t\t\t\tLastUpgradeCheck = 2660;",
   "\t\t\t\tTargetAttributes = {",
-  "\t\t\t\t\t#{app_target_id} = {CreatedOnToolsVersion = 26.6; };",
+  "\t\t\t\t\t#{app_target_id} = {CreatedOnToolsVersion = 26.6; SystemCapabilities = {com.apple.Push = {enabled = 1; }; com.apple.iCloud = {enabled = 1; }; }; };",
   "\t\t\t\t\t#{share_target_id} = {CreatedOnToolsVersion = 26.6; };",
   "\t\t\t\t\t#{test_target_id} = {CreatedOnToolsVersion = 26.6; TestTargetID = #{app_target_id}; };",
-  "\t\t\t\t\t#{mac_target_id} = {CreatedOnToolsVersion = 26.6; };",
+  "\t\t\t\t\t#{mac_target_id} = {CreatedOnToolsVersion = 26.6; SystemCapabilities = {com.apple.Push = {enabled = 1; }; com.apple.iCloud = {enabled = 1; }; }; };",
   "\t\t\t\t\t#{mac_test_target_id} = {CreatedOnToolsVersion = 26.6; TestTargetID = #{mac_target_id}; };",
   "\t\t\t\t};",
   "\t\t\t};",

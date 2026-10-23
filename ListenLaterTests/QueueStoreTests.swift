@@ -5,6 +5,25 @@ import XCTest
 
 @MainActor
 final class QueueStoreTests: XCTestCase {
+    func testSyncRefreshResolvesImportedPlaceholderWithoutRelaunch() async throws {
+        let harness = try makeHarness(providers: [
+            QueueStubProvider(source: .podcast, acceptedHost: "podcasts.example")
+        ])
+        let writer = ModelContext(harness.container)
+        let url = URL(string: "https://podcasts.example/imported")!
+        let incoming = QueueItem(originalURL: url, source: .podcast, sortRank: 1_000)
+        writer.insert(incoming)
+        try writer.save()
+
+        await harness.store.refreshFromSync()
+
+        let imported = try XCTUnwrap(harness.store.item(id: incoming.id))
+        XCTAssertEqual(imported.originalURL, url)
+        XCTAssertEqual(imported.status, .ready)
+        XCTAssertEqual(imported.title, "Resolved imported")
+        XCTAssertEqual(harness.store.items.count, 1)
+    }
+
     func testVideoShareURLUsesDurableCanonicalPage() {
         let originalURL = URL(
             string: "https://x.com/OpenAI/status/1234567890123456789?s=20"

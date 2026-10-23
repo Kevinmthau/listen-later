@@ -56,6 +56,13 @@ final class QueueStore {
         }
     }
 
+    /// A remote device can export a saved link before its metadata finishes
+    /// resolving. Finish those imports here, including after that device quits.
+    func refreshFromSync() async {
+        refresh()
+        await resumePendingResolutions()
+    }
+
     /// Adds `url` and waits for it to resolve.
     @discardableResult
     func add(url: URL) async -> QueueItem? {

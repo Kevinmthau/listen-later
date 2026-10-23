@@ -16,6 +16,7 @@ struct ListenLaterApp: App {
         // and the user's iCloud data. Tests build their own containers.
         let isHostingUnitTests =
             ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || ProcessInfo.processInfo.arguments.contains("-InMemoryStore")
         let persistence: PersistenceController.Result
         do {
             persistence = try PersistenceController.makeContainer(
