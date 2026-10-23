@@ -55,6 +55,7 @@ enum PersistenceController {
     static func makeContainer(
         inMemory: Bool = false,
         resolveLocations: (() -> StoreLocations)? = nil,
+        resolveCloudKitContainerIdentifier: (() -> String?)? = nil,
         makeModelContainer: ContainerFactory = { schema, configuration in
             try ModelContainer(for: schema, configurations: [configuration])
         }
@@ -80,9 +81,15 @@ enum PersistenceController {
         let groupExists = locations.appGroup.map {
             FileManager.default.fileExists(atPath: $0.path)
         } ?? false
-        // Keep an established CloudKit store's record identities. Otherwise,
-        // retain an existing sandbox queue when App Group access recovers.
-        let useGroup = groupExists || (!sandboxExists && locations.appGroup != nil)
+        let sandboxMarker = locations.sandbox.appendingPathExtension("cloudkit")
+        let hasMirroredSandbox = sandboxExists
+            && FileManager.default.fileExists(atPath: sandboxMarker.path)
+        // Once a sandbox store has mirrored, its CloudKit record identities
+        // must remain intact. Copying those rows into an established group
+        // would race CloudKit imports and create duplicate remote records.
+        // An unmarked legacy fallback can still recover into the group.
+        let useGroup = !hasMirroredSandbox
+            && (groupExists || (!sandboxExists && locations.appGroup != nil))
         let storeURL = useGroup ? locations.appGroup! : locations.sandbox
         let name = useGroup ? "ListenLater" : "ListenLaterSandbox"
 
@@ -103,31 +110,76 @@ enum PersistenceController {
             }
         }
 
+        // Explicit CloudKit configuration in an unsigned/mis-signed build
+        // can crash asynchronously, beyond the reach of do/catch. Ask
+        // SwiftData to resolve the signed entitlement before enabling it.
+        let entitledContainer: String?
+        if let resolveCloudKitContainerIdentifier {
+            entitledContainer = resolveCloudKitContainerIdentifier()
+        } else {
+            entitledContainer = ModelConfiguration(
+                schema: schema,
+                groupContainer: .none,
+                cloudKitDatabase: .automatic
+            ).cloudKitContainerIdentifier
+        }
+        let localConfiguration = ModelConfiguration(
+            name,
+            schema: schema,
+            url: storeURL,
+            cloudKitDatabase: .none
+        )
+        var configurationNotice: String?
+        var createdSandboxMarker = false
+        if entitledContainer != AppConfiguration.iCloudContainerIdentifier {
+            configurationNotice = "This build is missing the signed iCloud entitlement for \(AppConfiguration.iCloudContainerIdentifier). Links are saved on this device until a correctly signed build is installed."
+        } else if !useGroup, !hasMirroredSandbox {
+            do {
+                try FileManager.default.createDirectory(
+                    at: storeURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                // Record the chosen cloud identity before asynchronous exports
+                // can start. If this cannot be made durable, stay local.
+                try Data(AppConfiguration.iCloudContainerIdentifier.utf8).write(
+                    to: sandboxMarker,
+                    options: .atomic
+                )
+                createdSandboxMarker = true
+            } catch {
+                configurationNotice = "iCloud sync could not safely initialize this queue. Links remain saved on this device. \(error.localizedDescription)"
+            }
+        }
         let container: ModelContainer
         let cloudBacked: Bool
         let fallbackReason: String?
-        do {
-            container = try makeModelContainer(schema, ModelConfiguration(
-                name,
-                schema: schema,
-                url: storeURL,
-                cloudKitDatabase: .private(AppConfiguration.iCloudContainerIdentifier)
-            ))
-            cloudBacked = true
-            fallbackReason = nil
-        } catch {
-            fallbackReason = error.localizedDescription
-            // The exact same durable store is retried without mirroring. A
-            // later successful launch exports links added while offline.
-            // If it cannot open locally either, propagate the error rather
-            // than silently presenting a different, empty queue.
-            container = try makeModelContainer(schema, ModelConfiguration(
-                name,
-                schema: schema,
-                url: storeURL,
-                cloudKitDatabase: .none
-            ))
+        if let configurationNotice {
+            container = try makeModelContainer(schema, localConfiguration)
             cloudBacked = false
+            fallbackReason = configurationNotice
+        } else {
+            do {
+                container = try makeModelContainer(schema, ModelConfiguration(
+                    name,
+                    schema: schema,
+                    url: storeURL,
+                    cloudKitDatabase: .private(AppConfiguration.iCloudContainerIdentifier)
+                ))
+                cloudBacked = true
+                fallbackReason = nil
+            } catch {
+                fallbackReason = error.localizedDescription
+                if createdSandboxMarker {
+                    // A synchronous failure never established mirroring. A
+                    // marker from an earlier launch must always be retained.
+                    try? FileManager.default.removeItem(at: sandboxMarker)
+                }
+                // Retry the exact same durable store without mirroring. A
+                // later successful launch exports links added while offline.
+                // Propagate a second failure instead of showing an empty queue.
+                container = try makeModelContainer(schema, localConfiguration)
+                cloudBacked = false
+            }
         }
         if let recovery {
             do {

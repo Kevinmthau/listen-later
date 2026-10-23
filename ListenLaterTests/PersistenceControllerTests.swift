@@ -12,6 +12,10 @@ final class PersistenceControllerTests: XCTestCase {
             resolveLocations: {
                 XCTFail("An in-memory test must not inspect the personal queue")
                 return .init(sandbox: URL(fileURLWithPath: "/unused"), appGroup: nil)
+            },
+            resolveCloudKitContainerIdentifier: {
+                XCTFail("An in-memory test must not resolve iCloud entitlements")
+                return nil
             }
         )
         XCTAssertFalse(result.isCloudBacked)
@@ -27,6 +31,7 @@ final class PersistenceControllerTests: XCTestCase {
             var attempts: [ModelConfiguration] = []
             let result = try PersistenceController.makeContainer(
                 resolveLocations: { .init(sandbox: stores.sandbox, appGroup: nil) },
+                resolveCloudKitContainerIdentifier: { AppConfiguration.iCloudContainerIdentifier },
                 makeModelContainer: { schema, configuration in
                     attempts.append(configuration)
                     return try localContainer(schema, configuration)
@@ -45,6 +50,34 @@ final class PersistenceControllerTests: XCTestCase {
         }
     }
 
+    func testMissingOrMismatchedICloudEntitlementOpensOnlyLocalStoreAndPreservesLinks() throws {
+        for entitlement in [nil, "iCloud.com.example.Unrelated"] as [String?] {
+            try withStores { stores in
+                let link = snapshot(title: "Saved before signing", updated: 20, progress: 15)
+                try seed(stores.sandbox, items: [link])
+                var attempts: [ModelConfiguration] = []
+                let result = try PersistenceController.makeContainer(
+                    resolveLocations: { .init(sandbox: stores.sandbox, appGroup: nil) },
+                    resolveCloudKitContainerIdentifier: { entitlement },
+                    makeModelContainer: { schema, configuration in
+                        attempts.append(configuration)
+                        return try localContainer(schema, configuration)
+                    }
+                )
+                XCTAssertFalse(result.isCloudBacked)
+                XCTAssertTrue(result.fallbackReason?.contains("signed iCloud entitlement") == true)
+                XCTAssertEqual(attempts.count, 1)
+                XCTAssertNil(attempts.first?.cloudKitContainerIdentifier)
+                XCTAssertEqual(attempts.first?.url, stores.sandbox)
+                let context = ModelContext(result.container)
+                let items = try context.fetch(FetchDescriptor<QueueItem>())
+                XCTAssertEqual(items.map(\.id), [link.id])
+                XCTAssertEqual(items.first?.title, link.title)
+                XCTAssertEqual(items.first?.playbackPosition, link.playbackPosition)
+            }
+        }
+    }
+
     func testCloudFailureAndLaterRecoveryUseSameStoreAndPreserveLinks() throws {
         try withStores { stores in
             let link = snapshot(title: "Added offline", updated: 20, progress: 15)
@@ -52,6 +85,7 @@ final class PersistenceControllerTests: XCTestCase {
             try autoreleasepool {
                 let result = try PersistenceController.makeContainer(
                     resolveLocations: { .init(sandbox: stores.sandbox, appGroup: nil) },
+                    resolveCloudKitContainerIdentifier: { AppConfiguration.iCloudContainerIdentifier },
                     makeModelContainer: { schema, configuration in
                         attempts.append(configuration)
                         if configuration.cloudKitContainerIdentifier != nil {
@@ -77,6 +111,7 @@ final class PersistenceControllerTests: XCTestCase {
             // queue. Continue mirroring the queue that contains the offline link.
             let recovered = try PersistenceController.makeContainer(
                 resolveLocations: { stores },
+                resolveCloudKitContainerIdentifier: { AppConfiguration.iCloudContainerIdentifier },
                 makeModelContainer: localContainer
             )
             XCTAssertTrue(recovered.isCloudBacked)
@@ -91,10 +126,47 @@ final class PersistenceControllerTests: XCTestCase {
         }
     }
 
+    func testMirroredSandboxKeepsItsCloudIdentityWhenExistingGroupReturns() throws {
+        try withStores { stores in
+            let link = snapshot(title: "Sandbox cloud identity", updated: 20, progress: 15)
+            try seed(stores.sandbox, items: [link])
+            try autoreleasepool {
+                let initialLaunch = try PersistenceController.makeContainer(
+                    resolveLocations: { .init(sandbox: stores.sandbox, appGroup: nil) },
+                    resolveCloudKitContainerIdentifier: { AppConfiguration.iCloudContainerIdentifier },
+                    makeModelContainer: localContainer
+                )
+                XCTAssertTrue(initialLaunch.isCloudBacked)
+            }
+            // The group has an older copy of the same cloud-backed link. Its
+            // store was inaccessible while the sandbox began mirroring.
+            try seed(stores.appGroup!, items: [snapshot(id: link.id, title: "Group copy", updated: 10, progress: 5)])
+            var openedURLs: [URL] = []
+            let returnedGroup = try PersistenceController.makeContainer(
+                resolveLocations: { stores },
+                resolveCloudKitContainerIdentifier: { AppConfiguration.iCloudContainerIdentifier },
+                makeModelContainer: { schema, configuration in
+                    openedURLs.append(configuration.url)
+                    return try localContainer(schema, configuration)
+                }
+            )
+            XCTAssertTrue(returnedGroup.isCloudBacked)
+            XCTAssertEqual(openedURLs, [stores.sandbox])
+            let context = ModelContext(returnedGroup.container)
+            let items = try context.fetch(FetchDescriptor<QueueItem>())
+            XCTAssertEqual(items.map(\.id), [link.id])
+            XCTAssertEqual(items.first?.title, link.title)
+            XCTAssertFalse(FileManager.default.fileExists(
+                atPath: stores.appGroup!.appendingPathExtension("recovery.json").path
+            ))
+        }
+    }
+
     func testNewQueueUsesAvailableAppGroup() throws {
         try withStores { stores in
             let result = try PersistenceController.makeContainer(
                 resolveLocations: { stores },
+                resolveCloudKitContainerIdentifier: { AppConfiguration.iCloudContainerIdentifier },
                 makeModelContainer: localContainer
             )
             XCTAssertEqual(result.container.configurations.first?.url, stores.appGroup)
@@ -118,6 +190,7 @@ final class PersistenceControllerTests: XCTestCase {
             try autoreleasepool {
                 let result = try PersistenceController.makeContainer(
                     resolveLocations: { stores },
+                    resolveCloudKitContainerIdentifier: { AppConfiguration.iCloudContainerIdentifier },
                     makeModelContainer: localContainer
                 )
                 XCTAssertEqual(result.container.configurations.first?.url, stores.appGroup)
@@ -143,6 +216,7 @@ final class PersistenceControllerTests: XCTestCase {
             try autoreleasepool {
                 let secondLaunch = try PersistenceController.makeContainer(
                     resolveLocations: { stores },
+                    resolveCloudKitContainerIdentifier: { AppConfiguration.iCloudContainerIdentifier },
                     makeModelContainer: localContainer
                 )
                 let context = ModelContext(secondLaunch.container)
@@ -174,6 +248,7 @@ final class PersistenceControllerTests: XCTestCase {
             try seed(stores.sandbox, items: [requeued.snapshot()])
             let result = try PersistenceController.makeContainer(
                 resolveLocations: { stores },
+                resolveCloudKitContainerIdentifier: { AppConfiguration.iCloudContainerIdentifier },
                 makeModelContainer: localContainer
             )
             let context = ModelContext(result.container)
@@ -192,6 +267,7 @@ final class PersistenceControllerTests: XCTestCase {
             try Data("Unreadable previous store".utf8).write(to: stores.sandbox)
             let result = try PersistenceController.makeContainer(
                 resolveLocations: { stores },
+                resolveCloudKitContainerIdentifier: { AppConfiguration.iCloudContainerIdentifier },
                 makeModelContainer: { schema, configuration in
                     if !configuration.allowsSave { throw CocoaError(.fileReadCorruptFile) }
                     return try localContainer(schema, configuration)
@@ -213,6 +289,7 @@ final class PersistenceControllerTests: XCTestCase {
             try Data("Invalid receipt".utf8).write(to: stores.appGroup!.appendingPathExtension("recovery.json"))
             let result = try PersistenceController.makeContainer(
                 resolveLocations: { stores },
+                resolveCloudKitContainerIdentifier: { AppConfiguration.iCloudContainerIdentifier },
                 makeModelContainer: localContainer
             )
             XCTAssertTrue(result.isCloudBacked)
@@ -227,6 +304,7 @@ final class PersistenceControllerTests: XCTestCase {
             var attempts: [URL] = []
             XCTAssertThrowsError(try PersistenceController.makeContainer(
                 resolveLocations: { stores },
+                resolveCloudKitContainerIdentifier: { AppConfiguration.iCloudContainerIdentifier },
                 makeModelContainer: { _, configuration in
                     attempts.append(configuration.url)
                     throw TestError.cloudUnavailable

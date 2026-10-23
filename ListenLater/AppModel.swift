@@ -144,7 +144,9 @@ final class AppModel {
                     return
                 }
                 guard let self else { return }
-                await self.queue.refreshFromSync()
+                await self.queue.refreshFromSync {
+                    self.playback.reconcileQueueState()
+                }
                 await self.queue.importPendingShares()
                 self.playback.reconcileQueueState()
             }
@@ -164,7 +166,9 @@ final class AppModel {
             }
             guard let self else { return }
             self.storeChangeRefreshTask = nil
-            await self.queue.refreshFromSync()
+            await self.queue.refreshFromSync {
+                self.playback.reconcileQueueState()
+            }
             self.playback.reconcileQueueState()
         }
     }

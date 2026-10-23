@@ -118,7 +118,7 @@ final class MacAppModel {
         // later activations perform the normal CloudKit/local refresh.
         guard hasStarted else { return }
         beginQueueObservation()
-        await sharedQueue.refreshFromSync()
+        await sharedQueue.refreshFromSync { reconcileQueuePresentation() }
         if localQueue.refresh() {
             await reconcileLocalMedia()
         } else {
@@ -352,7 +352,9 @@ final class MacAppModel {
                     return
                 }
                 guard let self else { return }
-                await self.sharedQueue.refreshFromSync()
+                await self.sharedQueue.refreshFromSync {
+                    self.reconcileQueuePresentation()
+                }
                 self.reconcileQueuePresentation()
             }
         }
@@ -370,7 +372,9 @@ final class MacAppModel {
             }
             guard let self else { return }
             self.storeChangeRefreshTask = nil
-            await self.sharedQueue.refreshFromSync()
+            await self.sharedQueue.refreshFromSync {
+                self.reconcileQueuePresentation()
+            }
             self.reconcileQueuePresentation()
         }
     }

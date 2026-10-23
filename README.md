@@ -340,6 +340,11 @@ group queue keeps its CloudKit identity and recovers missing sandbox links by
 UUID, retaining newer metadata and listening progress. Recovery receipts keep
 unchanged legacy records from reappearing after deletion. The old store is
 preserved; a recovery error is reported in Settings.
+Once a sandbox queue has been configured for CloudKit, a durable marker keeps
+that store selected, even if an older group store becomes available, so records
+already uploaded are not recreated with different CloudKit identities.
+An unsigned build opens the local queue with a signing diagnostic; it does not
+attempt CloudKit initialization, which can fail outside Swift error handling.
 
 Both apps register for remote notifications at launch without requesting
 permission for alerts. Their platform-specific APNs entitlements and the iOS

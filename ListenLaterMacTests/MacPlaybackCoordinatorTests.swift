@@ -5,6 +5,44 @@ import XCTest
 
 @MainActor
 final class MacPlaybackCoordinatorTests: XCTestCase {
+    func testSyncDeletionStopsPlaybackBeforeUnrelatedMetadataFinishes() async throws {
+        let persistence = try PersistenceController.makeContainer(inMemory: true)
+        let gate = SyncMetadataGate()
+        let shared = QueueStore(
+            context: persistence.container.mainContext,
+            providers: ProviderRegistry(providers: [SlowSyncProvider(gate: gate)])
+        )
+        let localContainer = try LocalQueueStore.makeContainer(inMemory: true)
+        let current = podcast(title: "Current", rank: 1)
+        persistence.container.mainContext.insert(current)
+        try persistence.container.mainContext.save()
+        shared.refresh()
+        let engine = MacTestPlaybackEngine()
+        let coordinator = MacPlaybackCoordinator(
+            sharedQueue: shared,
+            localQueue: LocalQueueStore(context: localContainer.mainContext),
+            localMediaLibrary: temporaryLibrary(),
+            engine: engine
+        )
+        await coordinator.play()
+        XCTAssertTrue(engine.isPlaying)
+
+        persistence.container.mainContext.delete(current)
+        let incoming = podcast(title: "Incoming", rank: 2)
+        incoming.status = .resolving
+        persistence.container.mainContext.insert(incoming)
+        try persistence.container.mainContext.save()
+        let refresh = Task {
+            await shared.refreshFromSync { coordinator.reconcileQueueState() }
+        }
+        await gate.waitUntilStarted()
+
+        XCTAssertFalse(engine.isPlaying)
+        XCTAssertNil(coordinator.currentItemID)
+        await gate.release()
+        await refresh.value
+    }
+
     func testPlayWithNoSelectionSkipsUnavailableFirstItem() async throws {
         let sharedContainer = try PersistenceController.makeContainer(inMemory: true).container
         let localContainer = try LocalQueueStore.makeContainer(inMemory: true)
@@ -458,6 +496,35 @@ final class MacPlaybackCoordinatorTests: XCTestCase {
             root: FileManager.default.temporaryDirectory
                 .appending(path: "PlaybackTests-\(UUID().uuidString)")
         )
+    }
+}
+
+private actor SyncMetadataGate {
+    private var started = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func suspend() async {
+        started = true
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func waitUntilStarted() async {
+        while !started { await Task.yield() }
+    }
+
+    func release() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+private struct SlowSyncProvider: MediaProvider {
+    let source = ProviderSource.podcast
+    let gate: SyncMetadataGate
+    func canResolve(_ url: URL) -> Bool { true }
+    func resolve(_ url: URL) async throws -> ProviderResolvedItem {
+        await gate.suspend()
+        throw ProviderResolutionError.network("Timed out")
     }
 }
 
