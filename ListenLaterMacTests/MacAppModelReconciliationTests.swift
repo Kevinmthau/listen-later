@@ -1,8 +1,90 @@
+import CoreData
 import Foundation
+import SwiftData
 import XCTest
 
 @MainActor
 final class MacAppModelReconciliationTests: XCTestCase {
+    func testAddedLinkIsSavedInSharedQueueAndVisibleToAnotherContext() async throws {
+        let harness = try makeSyncHarness()
+        defer { harness.model.sceneWillResignActive() }
+        let url = URL(string: "https://example.com/episode.mp3")!
+
+        let added = await harness.model.addLink(url.absoluteString)
+
+        XCTAssertTrue(added)
+        let reader = ModelContext(harness.persistence.container)
+        let rows = try reader.fetch(FetchDescriptor<QueueItem>())
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows.first?.originalURL, url)
+        XCTAssertEqual(rows.first?.status, .ready)
+        XCTAssertEqual(harness.model.selectedItemID, rows.first?.id)
+        XCTAssertTrue(harness.model.localQueue.items.isEmpty)
+    }
+
+    func testRemoteStoreNotificationImportsAndResolvesLinkWhileActive() async throws {
+        let harness = try makeSyncHarness()
+        await harness.model.start()
+        defer { harness.model.sceneWillResignActive() }
+        let writer = ModelContext(harness.persistence.container)
+        let incoming = QueueItem(
+            originalURL: URL(string: "https://example.com/incoming.mp3")!,
+            source: .podcast,
+            sortRank: 1_000
+        )
+        writer.insert(incoming)
+        try writer.save()
+        NotificationCenter.default.post(name: .NSPersistentStoreRemoteChange, object: nil)
+
+        let deadline = ContinuousClock.now + .seconds(5)
+        while harness.model.sharedQueue.item(id: incoming.id)?.status != .ready,
+              ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        let imported = try XCTUnwrap(harness.model.sharedQueue.item(id: incoming.id))
+        XCTAssertEqual(imported.status, .ready)
+        XCTAssertEqual(imported.originalURL, incoming.originalURL)
+        XCTAssertEqual(harness.model.selectedItemID, incoming.id)
+    }
+
+    func testActivationImportsLinkReceivedWhileInactive() async throws {
+        let harness = try makeSyncHarness()
+        await harness.model.start()
+        harness.model.sceneWillResignActive()
+        defer { harness.model.sceneWillResignActive() }
+        let writer = ModelContext(harness.persistence.container)
+        let incoming = QueueItem(
+            originalURL: URL(string: "https://example.com/background.mp3")!,
+            source: .podcast,
+            sortRank: 1_000
+        )
+        writer.insert(incoming)
+        try writer.save()
+
+        await harness.model.refresh()
+
+        XCTAssertEqual(harness.model.sharedQueue.item(id: incoming.id)?.status, .ready)
+    }
+
+    private func makeSyncHarness() throws -> (
+        model: MacAppModel, persistence: PersistenceController.Result
+    ) {
+        let persistence = try PersistenceController.makeContainer(inMemory: true)
+        let root = FileManager.default.temporaryDirectory.appending(
+            path: "MacSyncTests-\(UUID().uuidString)", directoryHint: .isDirectory
+        )
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        let model = MacAppModel(
+            sharedPersistence: persistence,
+            localContainer: try LocalQueueStore.makeContainer(inMemory: true),
+            localMediaLibrary: LocalMediaLibrary(root: root),
+            // Direct audio resolution is deterministic; omit network endpoint checks.
+            providers: ProviderRegistry(providers: [PodcastProviderAdapter()])
+        )
+        return (model, persistence)
+    }
+
     func testRefreshDoesNotReconcileWhileImportIsInFlight() async throws {
         let root = FileManager.default.temporaryDirectory.appending(
             path: "MacAppModelTests-\(UUID().uuidString)",
@@ -33,6 +115,7 @@ final class MacAppModelReconciliationTests: XCTestCase {
             localMediaLibrary: library
         )
         await model.start()
+        defer { model.sceneWillResignActive() }
 
         let orphanID = UUID()
         let orphanDirectory = ownedRoot
@@ -62,6 +145,9 @@ final class MacAppModelReconciliationTests: XCTestCase {
             filename: imported.localFilename
         )
         XCTAssertTrue(isAvailable)
+        XCTAssertTrue(try sharedPersistence.container.mainContext.fetch(
+            FetchDescriptor<QueueItem>()
+        ).isEmpty)
     }
 }
 

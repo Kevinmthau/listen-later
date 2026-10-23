@@ -295,6 +295,7 @@ Configure the containing app target:
 - **App Groups**: enable `group.com.kevinthau.ListenLater`
 - **iCloud**: enable CloudKit and select
   `iCloud.com.kevinthau.ListenLater`
+- **Push Notifications**: enable silent CloudKit change delivery.
 - **Background Modes**: enable **Audio, AirPlay, and Picture in Picture** and
   **Remote notifications**
 
@@ -311,6 +312,7 @@ Configure the Mac app target:
 - **App Groups**: enable `group.com.kevinthau.ListenLater`.
 - **iCloud**: enable CloudKit and select
   `iCloud.com.kevinthau.ListenLater`.
+- **Push Notifications**: enable silent CloudKit change delivery.
 - Do not add broad file-system entitlements. The security-scoped file-picker
   permission is held only while the selected movie is copied into the sandbox.
 
@@ -325,18 +327,46 @@ falls back to local-only storage.
 
 ## CloudKit setup and schema promotion
 
-The app requests a SwiftData `ModelConfiguration` in the App Group container,
-backed by the user’s private CloudKit database. If CloudKit setup fails, it
-falls back first to an App Group local store and then to an app-sandbox store.
-A build without the App Group entitlement goes straight to the app-sandbox
-store, because SwiftData terminates the app instead of throwing when a
-configuration names an App Group it can’t use. When the app hosts the unit
+Both apps save links into the same `QueueItem` schema and private CloudKit
+container. The App Group provides local storage and the iOS Share Extension
+inbox; it is not required for CloudKit. If the App Group is unavailable, the
+queue can still sync from the app's sandbox. If CloudKit initialization fails,
+the app retries that same store locally so saved links remain available and
+can upload when CloudKit starts successfully on a later launch.
+
+An existing sandbox queue remains in use when App Group access becomes
+available for the first time. If both legacy stores exist, the established
+group queue keeps its CloudKit identity and recovers missing sandbox links by
+UUID, retaining newer metadata and listening progress. Recovery receipts keep
+unchanged legacy records from reappearing after deletion. The old store is
+preserved; a recovery error is reported in Settings.
+Once a sandbox queue has been configured for CloudKit, a durable marker keeps
+that store selected, even if an older group store becomes available, so records
+already uploaded are not recreated with different CloudKit identities.
+An established group queue is also remembered outside the group. If access to
+it disappears, new links stay in a local fallback and recover into the original
+queue when access returns. If a previously unknown legacy group is discovered
+after the sandbox has already mirrored, Settings reports that it cannot be
+merged automatically; both stores are preserved for one-time recovery of any
+older links that never uploaded.
+An unsigned build opens the local queue with a signing diagnostic; it does not
+attempt CloudKit initialization, which can fail outside Swift error handling.
+
+Both apps register for remote notifications at launch without requesting
+permission for alerts. Their platform-specific APNs entitlements and the iOS
+`remote-notification` background mode allow SwiftData to receive silent changes.
+The source entitlements use the development APNs environment; distribution
+signing/export must select the environment authorized by its provisioning
+profile. See Apple's [APNs registration documentation](https://developer.apple.com/documentation/usernotifications/registering-your-app-with-apns).
+
+When the app hosts the unit
 tests, it uses an in-memory store instead and, like demo mode, leaves the
 Share Extension inbox alone.
 That fallback keeps the app usable, but it can hide an entitlement mistake.
-Open **Settings** (the gear) in the app and confirm **iCloud Sync: On** before
-considering setup complete. While sync has fallen back to a local store, a
-crossed-out cloud also appears beside the gear.
+Settings reports whether the queue was configured for iCloud or fell back to
+local storage. That is configuration status, not proof that an upload completed;
+validate delivery on both devices. While iOS has fallen back to a local store,
+a crossed-out cloud also appears beside the gear.
 
 While the app is foregrounded, it re-reads its SwiftData queue when the store
 posts `NSPersistentStoreRemoteChange`, which CloudKit imports trigger, so
@@ -346,6 +376,32 @@ notifications are coalesced to one refresh per half second, and a refresh every
 writes only when another device's progress disagrees with this one, so this
 device's own saves don't trigger more saves. CloudKit transport itself remains
 asynchronous.
+
+Links can arrive while their metadata is still resolving on the source device.
+The receiving app resumes that work after a remote-store refresh, so quitting
+the Mac immediately after adding a link does not require restarting the iOS app.
+
+### Mac-to-iOS link sync acceptance
+
+1. Install signed builds with the same iCloud container and sign both devices
+   into the same iCloud account. Both builds must use the **same CloudKit
+   environment**: a normal Debug Mac build uses Development, while TestFlight
+   and App Store iOS builds use Production. Use matching development builds or
+   matching distribution builds; the two databases do not share records.
+2. Open both apps. Add a supported podcast, YouTube, or X/Instagram link on the
+   Mac and confirm it appears in the iOS queue without relaunching. CloudKit
+   delivery is asynchronous, not an immediate transfer.
+3. Add a link while the Mac is offline, reconnect, and confirm eventual delivery.
+   Background iOS while adding another link, then reopen it and confirm delivery.
+4. Verify queue order, played state, listening progress, and deletion synchronize
+   in both directions. Verify an imported movie remains only on the Mac.
+5. If a link is missing, check Settings for a local fallback, the signed products'
+   container and APNs entitlements, the iCloud account, and the CloudKit
+   environment/schema. A local queue refresh does not force a CloudKit download.
+
+Automated tests exercise storage recovery, shared-store routing, and import
+refreshes without contacting iCloud. Signed-device testing is still required
+to validate APNs delivery and production provisioning.
 
 Queue order is a fractional `sortRank`. A move gives only the moved item a rank
 between its neighbours, so it changes one record rather than renumbering the
@@ -557,8 +613,8 @@ xcodebuild \
   test
 ```
 
-The 180-test automated suite is deterministic and does not require a live API
-key or network access: 160 iOS tests plus 20 Mac-specific tests.
+The iOS and Mac automated suites are deterministic and do not require a live
+API key or network access.
 
 - `ProviderParsingTests` covers supported and hostile YouTube and social-video
   URL forms, video-grabber request/response behavior, expiration handling,
@@ -587,6 +643,12 @@ key or network access: 160 iOS tests plus 20 Mac-specific tests.
 - `LocalQueueCompatibilityTests` verifies the non-CloudKit local store,
   snapshot round trips, no share URL for local movies, and safe unknown-source
   handling.
+- `PersistenceControllerTests` runs on both platforms and verifies CloudKit
+  selection without an App Group, local fallback and relaunch recovery,
+  preservation of legacy queues, and idempotent recovery after deletion.
+- `MacAppModelReconciliationTests` verifies links enter the shared queue,
+  incoming links refresh while active and after activation, and local imports
+  remain isolated from the shared queue.
 - `MacPlaybackCoordinatorTests` verifies automatic skip of missing local bytes
   without mutating ready/played state and rejects stale async playback starts.
 

@@ -56,6 +56,16 @@ final class QueueStore {
         }
     }
 
+    /// A remote device can export a saved link before its metadata finishes
+    /// resolving. Finish those imports here, including after that device quits.
+    func refreshFromSync(reconcile: () -> Void = {}) async {
+        refresh()
+        // Deletions and progress changes must reach playback immediately,
+        // even when an unrelated imported link needs a slow metadata request.
+        reconcile()
+        await resumePendingResolutions()
+    }
+
     /// Adds `url` and waits for it to resolve.
     @discardableResult
     func add(url: URL) async -> QueueItem? {
@@ -260,7 +270,8 @@ final class QueueStore {
     func resumePendingResolutions() async {
         let pending = items.filter { $0.status == .resolving }
         for item in pending where item.status == .resolving {
-            await resolve(item)
+            guard !Task.isCancelled else { return }
+            await resolve(item, onlyWhileUnchanged: true)
         }
     }
 
@@ -618,9 +629,11 @@ final class QueueStore {
     private func resolve(
         _ item: QueueItem,
         preserveAvailabilityOnTransientFailure: Bool = false,
-        reportsFailure: Bool = false
+        reportsFailure: Bool = false,
+        onlyWhileUnchanged: Bool = false
     ) async {
         let itemID = item.id
+        let startedVersion = item.updatedAt
         guard let url = item.originalURL,
               resolvingItemIDs.insert(itemID).inserted
         else {
@@ -634,7 +647,12 @@ final class QueueStore {
 
         do {
             let resolved = try await providers.resolve(url)
-            guard let liveItem = self.item(id: itemID) else { return }
+            guard !Task.isCancelled,
+                  let liveItem = self.item(id: itemID),
+                  !onlyWhileUnchanged || (
+                    liveItem.status == .resolving && liveItem.updatedAt == startedVersion
+                  )
+            else { return }
             // Decided now rather than when resolution began: playback may
             // have started waiting on an item that was being prefetched.
             let isAwaited = liveItem.status == .resolving
@@ -644,7 +662,15 @@ final class QueueStore {
                 resolutionHandler?(liveItem)
             }
         } catch {
-            guard let liveItem = self.item(id: itemID) else { return }
+            // Background sync work is cancelled when the scene deactivates.
+            // Leave its placeholder resumable, and never overwrite a newer
+            // ready result imported while this device's lookup was awaiting.
+            guard !Task.isCancelled, !(error is CancellationError),
+                  let liveItem = self.item(id: itemID),
+                  !onlyWhileUnchanged || (
+                    liveItem.status == .resolving && liveItem.updatedAt == startedVersion
+                  )
+            else { return }
             let isAwaited = liveItem.status == .resolving
             let policyExpiration = Date().addingTimeInterval(-30 * 24 * 60 * 60)
             let mustDeleteExpiredYouTubeMetadata =

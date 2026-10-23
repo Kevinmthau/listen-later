@@ -5,6 +5,75 @@ import XCTest
 
 @MainActor
 final class QueueStoreTests: XCTestCase {
+    func testStaleSyncResolutionFailurePreservesNewerReadyImport() async throws {
+        let gate = QueueResolutionGate()
+        let harness = try makeHarness(providers: [DelayedFailingQueueProvider(gate: gate)])
+        let writer = ModelContext(harness.container)
+        let incoming = QueueItem(
+            originalURL: URL(string: "https://podcasts.example/imported")!,
+            source: .podcast, sortRank: 1_000
+        )
+        writer.insert(incoming)
+        try writer.save()
+        let refresh = Task { await harness.store.refreshFromSync() }
+        await gate.waitUntilStarted()
+
+        incoming.title = "Resolved on Mac"
+        incoming.status = .ready
+        incoming.playbackURLString = "https://cdn.example.com/resolved.mp3"
+        incoming.updatedAt = Date().addingTimeInterval(1)
+        try writer.save()
+        harness.store.refresh()
+        await gate.release()
+        await refresh.value
+
+        let imported = try XCTUnwrap(harness.store.item(id: incoming.id))
+        XCTAssertEqual(imported.status, .ready)
+        XCTAssertEqual(imported.title, "Resolved on Mac")
+        XCTAssertNil(imported.unavailableReason)
+    }
+
+    func testCancelledSyncResolutionLeavesPlaceholderResumable() async throws {
+        let gate = QueueResolutionGate()
+        let harness = try makeHarness(providers: [DelayedFailingQueueProvider(gate: gate)])
+        let writer = ModelContext(harness.container)
+        let incoming = QueueItem(
+            originalURL: URL(string: "https://podcasts.example/imported")!,
+            source: .podcast, sortRank: 1_000
+        )
+        writer.insert(incoming)
+        try writer.save()
+        let refresh = Task { await harness.store.refreshFromSync() }
+        await gate.waitUntilStarted()
+        refresh.cancel()
+        await gate.release()
+        await refresh.value
+
+        let imported = try XCTUnwrap(harness.store.item(id: incoming.id))
+        XCTAssertEqual(imported.status, .resolving)
+        XCTAssertNil(imported.unavailableReason)
+        XCTAssertFalse(harness.store.isResolving)
+    }
+
+    func testSyncRefreshResolvesImportedPlaceholderWithoutRelaunch() async throws {
+        let harness = try makeHarness(providers: [
+            QueueStubProvider(source: .podcast, acceptedHost: "podcasts.example")
+        ])
+        let writer = ModelContext(harness.container)
+        let url = URL(string: "https://podcasts.example/imported")!
+        let incoming = QueueItem(originalURL: url, source: .podcast, sortRank: 1_000)
+        writer.insert(incoming)
+        try writer.save()
+
+        await harness.store.refreshFromSync()
+
+        let imported = try XCTUnwrap(harness.store.item(id: incoming.id))
+        XCTAssertEqual(imported.originalURL, url)
+        XCTAssertEqual(imported.status, .ready)
+        XCTAssertEqual(imported.title, "Resolved imported")
+        XCTAssertEqual(harness.store.items.count, 1)
+    }
+
     func testVideoShareURLUsesDurableCanonicalPage() {
         let originalURL = URL(
             string: "https://x.com/OpenAI/status/1234567890123456789?s=20"
@@ -980,6 +1049,18 @@ private struct DelayedQueueProvider: MediaProvider {
             ),
             isMadeForKids: false
         )
+    }
+}
+
+private struct DelayedFailingQueueProvider: MediaProvider {
+    let source = ProviderSource.podcast
+    let gate: QueueResolutionGate
+
+    func canResolve(_ url: URL) -> Bool { url.host == "podcasts.example" }
+
+    func resolve(_ url: URL) async throws -> ProviderResolvedItem {
+        await gate.suspendResolution()
+        throw ProviderResolutionError.network("The request timed out")
     }
 }
 

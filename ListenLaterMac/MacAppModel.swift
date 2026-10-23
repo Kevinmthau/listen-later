@@ -60,9 +60,10 @@ final class MacAppModel {
     init(
         sharedPersistence: PersistenceController.Result,
         localContainer: ModelContainer,
-        localMediaLibrary: LocalMediaLibrary
+        localMediaLibrary: LocalMediaLibrary,
+        providers: ProviderRegistry? = nil
     ) {
-        let providers = ProviderRegistry(
+        let providers = providers ?? ProviderRegistry(
             youtubeAPIKey: "",
             videoGrabberEndpoint: AppConfiguration.videoGrabberEndpoint,
             videoGrabberAPIToken: AppConfiguration.videoGrabberAPIToken
@@ -117,7 +118,7 @@ final class MacAppModel {
         // later activations perform the normal CloudKit/local refresh.
         guard hasStarted else { return }
         beginQueueObservation()
-        sharedQueue.refresh()
+        await sharedQueue.refreshFromSync { reconcileQueuePresentation() }
         if localQueue.refresh() {
             await reconcileLocalMedia()
         } else {
@@ -351,7 +352,9 @@ final class MacAppModel {
                     return
                 }
                 guard let self else { return }
-                self.sharedQueue.refresh()
+                await self.sharedQueue.refreshFromSync {
+                    self.reconcileQueuePresentation()
+                }
                 self.reconcileQueuePresentation()
             }
         }
@@ -369,7 +372,9 @@ final class MacAppModel {
             }
             guard let self else { return }
             self.storeChangeRefreshTask = nil
-            self.sharedQueue.refresh()
+            await self.sharedQueue.refreshFromSync {
+                self.reconcileQueuePresentation()
+            }
             self.reconcileQueuePresentation()
         }
     }
