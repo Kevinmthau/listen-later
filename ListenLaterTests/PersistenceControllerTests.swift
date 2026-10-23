@@ -151,6 +151,7 @@ final class PersistenceControllerTests: XCTestCase {
                 }
             )
             XCTAssertTrue(returnedGroup.isCloudBacked)
+            XCTAssertTrue(returnedGroup.fallbackReason?.contains("cannot be merged automatically") == true)
             XCTAssertEqual(openedURLs, [stores.sandbox])
             let context = ModelContext(returnedGroup.container)
             let items = try context.fetch(FetchDescriptor<QueueItem>())
@@ -159,6 +160,91 @@ final class PersistenceControllerTests: XCTestCase {
             XCTAssertFalse(FileManager.default.fileExists(
                 atPath: stores.appGroup!.appendingPathExtension("recovery.json").path
             ))
+        }
+    }
+
+    func testEstablishedGroupUsesLocalFallbackAndRecoversBothQueuesWhenAccessReturns() throws {
+        for initialEntitlement in [AppConfiguration.iCloudContainerIdentifier, nil] as [String?] {
+            try withStores { stores in
+                let groupLink = snapshot(title: "Original group link", updated: 20, progress: 10)
+                let fallbackLink = snapshot(title: "Added during lost group access", updated: 30, progress: 15)
+                try seed(stores.appGroup!, items: [groupLink])
+                try autoreleasepool {
+                    let original = try PersistenceController.makeContainer(
+                        resolveLocations: { stores },
+                        resolveCloudKitContainerIdentifier: { initialEntitlement },
+                        makeModelContainer: localContainer
+                    )
+                    XCTAssertEqual(original.isCloudBacked, initialEntitlement != nil)
+                    XCTAssertEqual(original.container.configurations.first?.url, stores.appGroup)
+                }
+                try autoreleasepool {
+                    var attempts: [ModelConfiguration] = []
+                    let unavailableGroup = try PersistenceController.makeContainer(
+                        resolveLocations: { .init(sandbox: stores.sandbox, appGroup: nil) },
+                        resolveCloudKitContainerIdentifier: { AppConfiguration.iCloudContainerIdentifier },
+                        makeModelContainer: { schema, configuration in
+                            attempts.append(configuration)
+                            return try localContainer(schema, configuration)
+                        }
+                    )
+                    XCTAssertFalse(unavailableGroup.isCloudBacked)
+                    XCTAssertTrue(unavailableGroup.fallbackReason?.contains("existing iCloud queue is unavailable") == true)
+                    XCTAssertEqual(attempts.count, 1)
+                    XCTAssertNil(attempts.first?.cloudKitContainerIdentifier)
+                    XCTAssertEqual(attempts.first?.url, stores.sandbox)
+                    let context = ModelContext(unavailableGroup.container)
+                    let item = try XCTUnwrap(fallbackLink.makeItem())
+                    item.updatedAt = fallbackLink.updatedAt
+                    context.insert(item)
+                    try context.save()
+                    XCTAssertFalse(FileManager.default.fileExists(
+                        atPath: stores.sandbox.appendingPathExtension("cloudkit").path
+                    ))
+                }
+                let recovered = try PersistenceController.makeContainer(
+                    resolveLocations: { stores },
+                    resolveCloudKitContainerIdentifier: { AppConfiguration.iCloudContainerIdentifier },
+                    makeModelContainer: localContainer
+                )
+                XCTAssertTrue(recovered.isCloudBacked)
+                XCTAssertNil(recovered.fallbackReason)
+                XCTAssertEqual(recovered.container.configurations.first?.url, stores.appGroup)
+                let context = ModelContext(recovered.container)
+                let items = try context.fetch(FetchDescriptor<QueueItem>())
+                XCTAssertEqual(Set(items.map(\.id)), [groupLink.id, fallbackLink.id])
+                XCTAssertEqual(items.first { $0.id == groupLink.id }?.title, groupLink.title)
+                XCTAssertEqual(items.first { $0.id == fallbackLink.id }?.title, fallbackLink.title)
+            }
+        }
+    }
+
+    func testGroupSelectionMarkerFailureKeepsHealthyGroupLocalWithDiagnostic() throws {
+        try withStores { stores in
+            let link = snapshot(title: "Group link", updated: 20, progress: 10)
+            try seed(stores.appGroup!, items: [link])
+            let blockedParent = stores.sandbox.deletingLastPathComponent().appendingPathComponent("NotADirectory")
+            try Data("file blocks directory creation".utf8).write(to: blockedParent)
+            let blockedLocations = PersistenceController.StoreLocations(
+                sandbox: blockedParent.appendingPathComponent("Sandbox.store"),
+                appGroup: stores.appGroup
+            )
+            var attempts: [ModelConfiguration] = []
+            let result = try PersistenceController.makeContainer(
+                resolveLocations: { blockedLocations },
+                resolveCloudKitContainerIdentifier: { AppConfiguration.iCloudContainerIdentifier },
+                makeModelContainer: { schema, configuration in
+                    attempts.append(configuration)
+                    return try localContainer(schema, configuration)
+                }
+            )
+            XCTAssertFalse(result.isCloudBacked)
+            XCTAssertTrue(result.fallbackReason?.contains("could not safely initialize") == true)
+            XCTAssertEqual(attempts.count, 1)
+            XCTAssertNil(attempts.first?.cloudKitContainerIdentifier)
+            XCTAssertEqual(attempts.first?.url, stores.appGroup)
+            let context = ModelContext(result.container)
+            XCTAssertEqual(try context.fetch(FetchDescriptor<QueueItem>()).map(\.id), [link.id])
         }
     }
 

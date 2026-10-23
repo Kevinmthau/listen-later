@@ -343,6 +343,12 @@ preserved; a recovery error is reported in Settings.
 Once a sandbox queue has been configured for CloudKit, a durable marker keeps
 that store selected, even if an older group store becomes available, so records
 already uploaded are not recreated with different CloudKit identities.
+An established group queue is also remembered outside the group. If access to
+it disappears, new links stay in a local fallback and recover into the original
+queue when access returns. If a previously unknown legacy group is discovered
+after the sandbox has already mirrored, Settings reports that it cannot be
+merged automatically; both stores are preserved for one-time recovery of any
+older links that never uploaded.
 An unsigned build opens the local queue with a signing diagnostic; it does not
 attempt CloudKit initialization, which can fail outside Swift error handling.
 

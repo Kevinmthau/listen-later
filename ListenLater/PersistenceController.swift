@@ -82,6 +82,10 @@ enum PersistenceController {
             FileManager.default.fileExists(atPath: $0.path)
         } ?? false
         let sandboxMarker = locations.sandbox.appendingPathExtension("cloudkit")
+        // This selection lives outside the App Group so it remains readable
+        // if signing or container access temporarily makes the group vanish.
+        let groupMarker = locations.sandbox.appendingPathExtension("group-cloudkit")
+        let hasEstablishedGroup = FileManager.default.fileExists(atPath: groupMarker.path)
         let hasMirroredSandbox = sandboxExists
             && FileManager.default.fileExists(atPath: sandboxMarker.path)
         // Once a sandbox store has mirrored, its CloudKit record identities
@@ -89,7 +93,7 @@ enum PersistenceController {
         // would race CloudKit imports and create duplicate remote records.
         // An unmarked legacy fallback can still recover into the group.
         let useGroup = !hasMirroredSandbox
-            && (groupExists || (!sandboxExists && locations.appGroup != nil))
+            && (groupExists || (locations.appGroup != nil && (hasEstablishedGroup || !sandboxExists)))
         let storeURL = useGroup ? locations.appGroup! : locations.sandbox
         let name = useGroup ? "ListenLater" : "ListenLaterSandbox"
 
@@ -97,7 +101,9 @@ enum PersistenceController {
         // independent live containers never own the QueueItem model together.
         var recovery: Recovery?
         var recoveryNotice: String?
-        if useGroup, sandboxExists, locations.sandbox != storeURL {
+        if hasMirroredSandbox, groupExists, locations.appGroup != locations.sandbox {
+            recoveryNotice = "An older queue is also saved in the App Group and cannot be merged automatically with this iCloud queue. Its original data is preserved. This app continues syncing the current queue."
+        } else if useGroup, sandboxExists, locations.sandbox != storeURL {
             do {
                 recovery = try readRecovery(
                     sourceURL: locations.sandbox,
@@ -131,23 +137,32 @@ enum PersistenceController {
         )
         var configurationNotice: String?
         var createdSandboxMarker = false
-        if entitledContainer != AppConfiguration.iCloudContainerIdentifier {
-            configurationNotice = "This build is missing the signed iCloud entitlement for \(AppConfiguration.iCloudContainerIdentifier). Links are saved on this device until a correctly signed build is installed."
-        } else if !useGroup, !hasMirroredSandbox {
+        if useGroup, !hasEstablishedGroup {
             do {
-                try FileManager.default.createDirectory(
-                    at: storeURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                // Record the chosen cloud identity before asynchronous exports
-                // can start. If this cannot be made durable, stay local.
-                try Data(AppConfiguration.iCloudContainerIdentifier.utf8).write(
-                    to: sandboxMarker,
-                    options: .atomic
-                )
-                createdSandboxMarker = true
+                // Preserve the primary selection even in a locally signed
+                // build. Its group queue may contain links not yet exported.
+                try writeSelectionMarker(at: groupMarker)
             } catch {
                 configurationNotice = "iCloud sync could not safely initialize this queue. Links remain saved on this device. \(error.localizedDescription)"
+            }
+        }
+        if configurationNotice == nil {
+            if hasEstablishedGroup, !useGroup, !hasMirroredSandbox {
+                // Do not create a second cloud identity while the original
+                // group is inaccessible. Its local fallback is recovered when
+                // the original store becomes available again.
+                configurationNotice = "The App Group containing your existing iCloud queue is unavailable. New links are saved on this device and will be recovered into that queue when App Group access returns."
+            } else if entitledContainer != AppConfiguration.iCloudContainerIdentifier {
+                configurationNotice = "This build is missing the signed iCloud entitlement for \(AppConfiguration.iCloudContainerIdentifier). Links are saved on this device until a correctly signed build is installed."
+            } else if !useGroup, !hasMirroredSandbox {
+                do {
+                    // Record the chosen cloud identity before asynchronous
+                    // exports can start. Failure leaves the queue local.
+                    try writeSelectionMarker(at: sandboxMarker)
+                    createdSandboxMarker = true
+                } catch {
+                    configurationNotice = "iCloud sync could not safely initialize this queue. Links remain saved on this device. \(error.localizedDescription)"
+                }
             }
         }
         let container: ModelContainer
@@ -193,6 +208,17 @@ enum PersistenceController {
             container: container,
             isCloudBacked: cloudBacked,
             fallbackReason: notices.isEmpty ? nil : notices.joined(separator: "\n")
+        )
+    }
+
+    private static func writeSelectionMarker(at url: URL) throws {
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data(AppConfiguration.iCloudContainerIdentifier.utf8).write(
+            to: url,
+            options: .atomic
         )
     }
 
