@@ -310,6 +310,8 @@ Configure the Mac app target:
 - **App Sandbox**: enable outgoing network connections and user-selected file
   read access.
 - **App Groups**: enable `group.com.kevinthau.ListenLater`.
+  Associate the existing group with the native Mac App ID in the developer
+  account. In Xcode, use **App Groups → +** to select the registered group.
 - **Register App Groups**: keep `REGISTER_APP_GROUPS = YES` in both build
   configurations so automatic signing includes this group in the Mac profile.
   The signed entitlement alone does not authorize access to a protected group
