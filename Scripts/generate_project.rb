@@ -563,6 +563,7 @@ mac_settings = {
   "MARKETING_VERSION" => "1.0",
   "PRODUCT_BUNDLE_IDENTIFIER" => "com.kevinthau.ListenLaterMac",
   "PRODUCT_NAME" => "$(TARGET_NAME)",
+  "REGISTER_APP_GROUPS" => "YES",
   "SDKROOT" => "macosx",
   "SUPPORTED_PLATFORMS" => "macosx",
   "SWIFT_EMIT_LOC_STRINGS" => "YES",

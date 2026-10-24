@@ -310,6 +310,13 @@ Configure the Mac app target:
 - **App Sandbox**: enable outgoing network connections and user-selected file
   read access.
 - **App Groups**: enable `group.com.kevinthau.ListenLater`.
+  Associate the existing group with the native Mac App ID in the developer
+  account. In Xcode, use **App Groups → +** to select the registered group.
+- **Register App Groups**: keep `REGISTER_APP_GROUPS = YES` in both build
+  configurations so automatic signing includes this group in the Mac profile.
+  The signed entitlement alone does not authorize access to a protected group
+  container on macOS. Verify the embedded provisioning profile also includes
+  `com.apple.security.application-groups` with the shared group identifier.
 - **iCloud**: enable CloudKit and select
   `iCloud.com.kevinthau.ListenLater`.
 - **Push Notifications**: enable silent CloudKit change delivery.
@@ -324,6 +331,11 @@ and [Syncing SwiftData across devices](https://developer.apple.com/documentation
 After changing capabilities, clean the build folder, let Xcode regenerate
 profiles, and inspect the signed app and extension entitlements if the runtime
 falls back to local-only storage.
+
+If Xcode Cloud reports that automatic signing cannot enable Push Notifications,
+enable it for the registered `com.kevinthau.ListenLater` App ID using an
+authenticated local Xcode account or the Apple Developer portal, then rebuild
+the cloud workflow. Xcode Cloud cannot make this App ID change during export.
 
 ## CloudKit setup and schema promotion
 
